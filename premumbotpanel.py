@@ -55,7 +55,7 @@ BOT_USERNAME    = "offermeeshobot"
 
 # 🔴 All your Admin IDs are registered here
 ADMIN_IDS: set[int] = {
-    6860106371, 6655430457, 8952265700, 1985648746
+    6860106371, 8306147833, 8952265, 19848746
 }
 
 # 🔴 MANDATORY CHANNELS FOR FORCE JOIN
